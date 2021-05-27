@@ -59,6 +59,7 @@ const errors = {
   errorInvalidOrderTotal: Fun([], Null),
   errorAmountsExceedBalance: Fun([], Null),
   errorInvalidRecipientAmounts: Fun([], Null),
+  errorGenericInvalidAmounts: Fun([], Null),
 }
 
 // Buyer.only(() => declassify(interact.errorInvalidRecipientAmounts()))
@@ -87,6 +88,7 @@ export const main = Reach.App(
     if(orderTotal <= 0) {
       Buyer.only(() => declassify(interact.errorInvalidOrderTotal()))
     } else {
+      // Unneeded but for the sake of sanity.
       assert(orderTotal > 0);
 
       /**
@@ -100,6 +102,8 @@ export const main = Reach.App(
        */ 
       const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
         const validationOnly = !executeTransfers; 
+
+        // Unneeded but for the sake of sanity.
         assert(validationOnly == !executeTransfers);
         assert(oTotal > 0);
 
@@ -113,7 +117,7 @@ export const main = Reach.App(
 
         var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
         invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
-        while(recipientIdx < recips.length && foundNonpositive) { 
+        while(recipientIdx < recips.length && !foundNonpositive) { 
           const recipient = recips[recipientIdx];   
           const amt = recipient.amtToReceive;
 
@@ -123,7 +127,6 @@ export const main = Reach.App(
               continue;
             }
           } else { 
-            assert(amt > 0);
             transfer(recipient.amtToReceive).to(recipient.address);
             commit();
             Anybody.publish(); 
@@ -140,10 +143,13 @@ export const main = Reach.App(
         }
 
         if(validationOnly) {
-          if(!foundNonpositive) {
+          const balanceExceeded = totalAmtTransferred > balance() || totalAmtTransferred > oTotal;
+          const insufficientAmtTransferred  = totalAmtTransferred < oTotal;
+
+          if(foundNonpositive || balanceExceeded || insufficientAmtTransferred) {
             return false;
           } else {
-            return totalAmtTransferred == oTotal;
+            return true;
           }
         }
       }
@@ -152,8 +158,11 @@ export const main = Reach.App(
       const shouldPayRecipients = payAmts(recipients, orderTotal, iBal, false)
 
       if(!shouldPayRecipients) {
-        Buyer.only(() => declassify(interact.errorAmountsExceedBalance()));
+        Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
       } else {  
+        // Unneeded but for the sake of sanity.
+        assert(shouldPayRecipients == true);
+        
         commit();
         Buyer.publish().pay(orderTotal); 
         payAmts(recipients, orderTotal, balance(), true);
