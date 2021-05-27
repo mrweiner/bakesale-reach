@@ -60,6 +60,9 @@ const errors = {
   errorAmountsExceedBalance: Fun([], Null),
   errorInvalidRecipientAmounts: Fun([], Null),
 }
+
+// Buyer.only(() => declassify(interact.errorInvalidRecipientAmounts()))
+
  
 const BuyerInterface = {
   orderTotal: UInt,
@@ -87,98 +90,68 @@ export const main = Reach.App(
       assert(orderTotal > 0);
 
       /**
-       * Checks whether or not all of the given recipient amounts are greater than 0.
+       * Validate the transfer amounts or execute the transfers.
        * 
-       * @param {RecipientInterface[]} recips - The recipients to be paid.
-       * @returns {Bool} True if all recipient amounts are > 0, else false.
-       */
-      const validateRecipientAmountsPositive = (recips) => {
-        var [allPositive, recipientIdx] = [true, 0];
-        invariant(balance() == 0)
-        while(recipientIdx < recips.length && allPositive) {
-          const recipient = recips[recipientIdx];
-         
-          if(recipient.amtToReceive == 0) {
-            allPositive = false;
-            continue;
+       * @param {RecipientInterface[]} recips - The recipients to validate/execute against. 
+       * @param {Number} oTotal - The orderTotal. 
+       * @param {Number} initialBalance - The balance() at the time of execution. 
+       * @param {Bool} executeTransfers - Whether or not to transfer funds. If false, function will only validate. 
+       * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
+       */ 
+      const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
+        const validationOnly = !executeTransfers; 
+        assert(validationOnly == !executeTransfers);
+        assert(oTotal > 0);
+
+        if(validationOnly){
+          assert(initialBalance == 0);
+        } else {
+          assert(initialBalance > 0);
+        }
+
+        const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
+
+        var [amtRemaining, totalAmtTransferred, recipientIdx, allAmountsValid] = [oTotal, 0, 0, true] 
+        invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
+        while(recipientIdx < recips.length) { 
+          const recipient = recips[recipientIdx];   
+          const amt = recipient.amtToReceive;
+          assert(amt > 0);
+          
+          if(executeTransfers) { 
+            transfer(recipient.amtToReceive).to(recipient.address);
+            commit();
+            Anybody.publish(); 
           }
 
-          assert(recipient.amtToReceive > 0);
-          assert(allPositive == true);
-          recipientIdx = recipientIdx + 1;
+          const newTotalAmtTransferred = totalAmtTransferred + amt;
+          [amtRemaining, totalAmtTransferred, recipientIdx] = [
+            amtRemaining - amt,  
+            newTotalAmtTransferred,
+            recipientIdx + 1, 
+          ];
+
           continue;
         }
 
-        return allPositive;
-      } 
-
-      const recipientAmountsValid = validateRecipientAmountsPositive(recipients);
-      if(!recipientAmountsValid){
-        Buyer.only(() => declassify(interact.errorInvalidRecipientAmounts()))
-      } else {
-        /**
-         * Validate the transfer amounts or execute the transfers.
-         * 
-         * @param {RecipientInterface[]} recips - The recipients to validate/execute against. 
-         * @param {Number} oTotal - The orderTotal. 
-         * @param {Number} initialBalance - The balance() at the time of execution. 
-         * @param {Bool} executeTransfers - Whether or not to transfer funds. If false, function will only validate. 
-         * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
-         */ 
-        const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
-          const validationOnly = !executeTransfers; 
-          assert(validationOnly == !executeTransfers);
-          assert(oTotal > 0);
-
-          if(validationOnly){
-            assert(initialBalance == 0);
-          } else {
-            assert(initialBalance > 0);
-          }
-
-          const balInv = (i, t, v) => balance() == (v ? i : i - t); 
-
-          var [amtRemaining, totalAmtTransferred, recipientIdx] = [oTotal, 0, 0] 
-          invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
-          while(recipientIdx < recips.length) { 
-            const recipient = recips[recipientIdx];   
-            const amt = recipient.amtToReceive;
-            assert(amt > 0);
-            
-            if(executeTransfers) { 
-              transfer(recipient.amtToReceive).to(recipient.address);
-              commit();
-              Anybody.publish(); 
-            }
-
-            const newTotalAmtTransferred = totalAmtTransferred + amt;
-            [amtRemaining, totalAmtTransferred, recipientIdx] = [
-              amtRemaining - amt,  
-              newTotalAmtTransferred,
-              recipientIdx + 1, 
-            ];
-
-            continue;
-          }
-
-          if(validationOnly) {
-            assert(amtRemaining == 0);
-            return totalAmtTransferred == oTotal;
-          }
-        }
-
-        const iBal = balance(); 
-        const shouldPayRecipients = payAmts(recipients, orderTotal, iBal, false)
-
-        if(!shouldPayRecipients) {
-          Buyer.only(() => declassify(interact.errorAmountsExceedBalance()));
-        } else {  
-          commit();
-          Buyer.publish().pay(orderTotal); 
-          payAmts(recipients, orderTotal, balance(), true);
+        if(validationOnly) {
+          assert(amtRemaining == 0);
+          return totalAmtTransferred == oTotal;
         }
       }
+
+      const iBal = balance(); 
+      const shouldPayRecipients = payAmts(recipients, orderTotal, iBal, false)
+
+      if(!shouldPayRecipients) {
+        Buyer.only(() => declassify(interact.errorAmountsExceedBalance()));
+      } else {  
+        commit();
+        Buyer.publish().pay(orderTotal); 
+        payAmts(recipients, orderTotal, balance(), true);
+      }
     }
+  
 
     commit();
   }
