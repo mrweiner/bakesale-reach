@@ -111,14 +111,19 @@ export const main = Reach.App(
 
         const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
 
-        var [amtRemaining, totalAmtTransferred, recipientIdx, allAmountsValid] = [oTotal, 0, 0, true] 
+        var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
         invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
-        while(recipientIdx < recips.length) { 
+        while(recipientIdx < recips.length && foundNonpositive) { 
           const recipient = recips[recipientIdx];   
           const amt = recipient.amtToReceive;
-          assert(amt > 0);
-          
-          if(executeTransfers) { 
+
+          if(validationOnly) {
+            if(amt <= 0) {
+              foundNonpositive = true;
+              continue;
+            }
+          } else { 
+            assert(amt > 0);
             transfer(recipient.amtToReceive).to(recipient.address);
             commit();
             Anybody.publish(); 
@@ -135,8 +140,11 @@ export const main = Reach.App(
         }
 
         if(validationOnly) {
-          assert(amtRemaining == 0);
-          return totalAmtTransferred == oTotal;
+          if(!foundNonpositive) {
+            return false;
+          } else {
+            return totalAmtTransferred == oTotal;
+          }
         }
       }
 
