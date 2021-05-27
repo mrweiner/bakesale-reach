@@ -1,0 +1,104 @@
+"reach 0.1";
+/**
+ * Situation:
+ *  - Bakesale manages the smart contract
+ *  - Merchants list a product for sale
+ *  -- They allocated x% to y beneficiaries.
+ *  - Buyer pays for their order
+ *  - Contract distributes funds between
+ *  -- Bakesale
+ *  -- Merchants
+ *  -- Beneficiaries
+ */
+/**
+ * Problem Analysis:
+ * Who is involved in this application?
+ *  - Bakesale: Initiates the application
+ *  - Bakesale tax account: Receives taxes
+ *  - Buyer: Deposits funds
+ *  - Merchants: Receive funds, designate beneficiaries
+ *  - Beneficiaries: Receive funds
+ *
+ * What information do they know at the start of the program?
+ *  - Nobody knows anything
+ *
+ * What information are they going to discover and use in the program?
+ *  - Buyer: Learn their order total and deposit funds
+ *
+ * What funds change ownership during the application and how?
+ *  - Buyer: Spends all of their funds into the contract
+ *  - Bakesale: Receives 5% of pre-tax funds
+ *  - Bakesale tax account: Receives 100% of taxes
+ *  - Beneficiaries: Receive their percentage of order subtotal (ie without tax or shipping)
+ *  - Merchant(s): Receive subtotal minus beneficiary% + shipping
+ */
+//
+// Complex workflow
+// 1. Bakesale inializes the contract
+// 2a. Buyer discovers the order total, subtotal, tax, shipping data, and item(s) data
+// 2b. Associated data should be a list of every individual product.
+//     Product needs to have
+//     - Its own total cost
+//     - Its own merchant wallet and percentage
+//     - List of beneficiary wallets and percentages
+// 2c. Buyer publishes the order total, shipping, tax and all product data
+// 2d. Buyer deposits order total into the contract
+// 3. Pay taxes to Bakesale Tax Account
+// 4a. Loop over every item
+// 4b. Pay 5% of item total to bakesale
+// 4c. Pay x% to each beneficiary ????
+// 4d. Pay remainder to the merchant
+//
+
+const RecipientInterface = {
+  amtToReceive: UInt,
+};
+
+const BuyerInterface = {
+  orderTotal: UInt,
+  showOrderCompleted: Fun([], Null)
+};
+
+export const main = Reach.App(
+  {}, [
+    Participant('Bakesale', RecipientInterface), 
+    Participant('BakesaleTaxes', RecipientInterface), 
+    ParticipantClass('Merchant', RecipientInterface),
+    ParticipantClass('Beneficiary', RecipientInterface),
+    Particpant('Buyer', BuyerInterface)
+  ],
+  (Bakesale, BakesaleTaxes, Merchant, Beneficiary, Buyer) => {
+    // 0. Bakesale inializes the contract
+    // 1a. Buyer discovers the order total
+    // 1b. Buyer publishes the order total and deposits into the contract
+    Buyer.only(() => {
+      const amt = declassify(interact.orderTotal)
+    });
+    Buyer.publish(amt)
+      .pay(amt);
+    commit();
+
+    // 2a. Frontend provides tax, fee, merchant and beneficiary addresses and amts
+    // 2b. Contract pays each of these address their designated amount.
+    each([Bakesale, BakesaleTaxes, Merchant, Beneficiary],  () => {
+
+    })
+  }
+);
+
+
+
+export const main = Reach.App(
+  {}, [
+    Participant('Funder', {amt: UInt}), 
+    ParticipantClass('Recipient', {}), 
+  ],
+  (Funder, Recipient) => {
+    Funder.only(() => {
+      const amt = declassify(interact.amt)
+    });
+    Buyer.publish(amt)
+      .pay(amt);
+    commit();    
+  }
+);
