@@ -52,7 +52,7 @@
 
 const RecipientInterface = {
   addr: Address,
-  amtToReceive: UInt,
+  percentToReceive: UInt,
 };
 
 const errors = {
@@ -66,7 +66,7 @@ const BuyerInterface = {
   orderTotal: UInt,
   // https://docs.reach.sh/ref-programs-compute.html#%28reach._%28%28.Maybe%29%29%29
   // getRecipients: Fun([], Array(Maybe(Object(RecipientInterface)), 5)),
-  getRecipients: Fun([], Array(Object(RecipientInterface), 1)),
+  getRecipients: Fun([], Array(Object(RecipientInterface), 200)), 
   messagePaidRecipient: Fun([Address, UInt], Null),
   ...errors
 };
@@ -89,48 +89,39 @@ export const main = Reach.App(
       assert(orderTotal > 0);
 
       // Validate that all order amounts are valid
-      const allValsPositive = recipients.reduce(true, (z, x) => !z ? z : x.amtToReceive > 0);
-      const totalTransfer = recipients.reduce(0, (z, x) => z + x.amtToReceive);
-      const shouldPayRecipients = allValsPositive && totalTransfer == orderTotal;
+      const recipPercentsValid = recipients.reduce(true, (z, x) => !z ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
+      const totalTransferPercent = recipients.reduce(0, (z, x) => z + x.percentToReceive);
+      const shouldPayRecipients = recipPercentsValid && totalTransferPercent == 1;
 
       if(!shouldPayRecipients) {
         Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
       } else {  
         // Unneeded but for the sake of sanity.
         assert(shouldPayRecipients == true);
-        assert(totalTransfer == orderTotal);
+        assert(totalTransferPercent == 1);
         
         commit();
         Buyer.publish().pay(orderTotal); 
-        assert(balance() > 0);
 
         // Transfer the funds
-        const initialBalance = balance();
-        var [amtRemaining, totalAmtTransferred, recipientIdx] = [orderTotal, 0, 0] 
-        // invariant(amtRemaining == orderTotal - totalAmtTransferred &&  balance() == initialBalance - totalAmtTransferred)
-        invariant(balance() == balance())
-
+        var [totalAmtTransferred, recipientIdx, baseBal] = [0, 0, balance()] 
+        invariant(balance() == baseBal - totalAmtTransferred)
         while(recipientIdx < recipients.length) { 
-          if(recipientIdx == 0) {
-            assert(balance() == initialBalance);
-            assert(amtRemaining == orderTotal);
-            assert(totalAmtTransferred == 0);   
-          } else {
-            assert(totalAmtTransferred > 0)
-          }
-       
-        
+          // Cannot base our calculations off of the orderTotal directly
+          // as the operable balance will be less due to fees.
+          const bal = recipientIdx == 0 ? balance() : baseBal;        
           const recipient = recipients[recipientIdx];   
-          const amt = recipient.amtToReceive; 
+          const pct = recipient.percentToReceive;
+          const amt = bal * pct; 
     
-          transfer(recipient.amtToReceive).to(recipient.addr);
+          transfer(amt).to(recipient.addr);
           commit();
           Anybody.publish(); 
       
-          [amtRemaining, totalAmtTransferred, recipientIdx] = [
-            amtRemaining - amt,  
+          [totalAmtTransferred, recipientIdx, baseBal] = [
             totalAmtTransferred + amt,
             recipientIdx + 1, 
+            bal
           ];
       
           continue;
