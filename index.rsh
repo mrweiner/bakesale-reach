@@ -74,6 +74,69 @@ const BuyerInterface = {
   ...errors
 };
 
+/**
+ * Validate the transfer amounts or execute the transfers.
+ * 
+ * @param {RecipientInterface[]} recips - The recipients to validate/execute against. 
+ * @param {Number} oTotal - The orderTotal. 
+ * @param {Number} initialBalance - The balance() at the time of execution. 
+ * @param {Bool} executeTransfers - Whether or not to transfer funds. If false, function will only validate. 
+ * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
+ */ 
+  const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
+  const validationOnly = !executeTransfers; 
+
+  // Unneeded but for the sake of sanity.
+  assert(validationOnly == !executeTransfers);
+  assert(oTotal > 0);
+
+  if(validationOnly){
+    assert(initialBalance == 0);
+  } else {
+    assert(initialBalance > 0);
+  }
+
+  const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
+
+  var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
+  invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
+  while(recipientIdx < recips.length && !foundNonpositive) { 
+    const recipient = recips[recipientIdx];   
+    const amt = recipient.amtToReceive;
+
+    if(validationOnly) {
+      if(amt <= 0) {
+        foundNonpositive = true;
+        continue;
+      }
+    } else { 
+      transfer(recipient.amtToReceive).to(recipient.address);
+      commit();
+      Anybody.publish(); 
+    }
+
+    const newTotalAmtTransferred = totalAmtTransferred + amt;
+    [amtRemaining, totalAmtTransferred, recipientIdx] = [
+      amtRemaining - amt,  
+      newTotalAmtTransferred,
+      recipientIdx + 1, 
+    ];
+
+    continue;
+  }
+
+  if(validationOnly) {
+    const balanceExceeded = totalAmtTransferred > balance() || totalAmtTransferred > oTotal;
+    const insufficientAmtTransferred  = totalAmtTransferred < oTotal;
+
+    if(foundNonpositive || balanceExceeded || insufficientAmtTransferred) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+}
+
 export const main = Reach.App(
   {}, [ Participant('Buyer', BuyerInterface) ],
   (Buyer) => {
@@ -90,69 +153,6 @@ export const main = Reach.App(
     } else {
       // Unneeded but for the sake of sanity.
       assert(orderTotal > 0);
-
-      /**
-       * Validate the transfer amounts or execute the transfers.
-       * 
-       * @param {RecipientInterface[]} recips - The recipients to validate/execute against. 
-       * @param {Number} oTotal - The orderTotal. 
-       * @param {Number} initialBalance - The balance() at the time of execution. 
-       * @param {Bool} executeTransfers - Whether or not to transfer funds. If false, function will only validate. 
-       * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
-       */ 
-      const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
-        const validationOnly = !executeTransfers; 
-
-        // Unneeded but for the sake of sanity.
-        assert(validationOnly == !executeTransfers);
-        assert(oTotal > 0);
-
-        if(validationOnly){
-          assert(initialBalance == 0);
-        } else {
-          assert(initialBalance > 0);
-        }
-
-        const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
-
-        var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
-        invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
-        while(recipientIdx < recips.length && !foundNonpositive) { 
-          const recipient = recips[recipientIdx];   
-          const amt = recipient.amtToReceive;
-
-          if(validationOnly) {
-            if(amt <= 0) {
-              foundNonpositive = true;
-              continue;
-            }
-          } else { 
-            transfer(recipient.amtToReceive).to(recipient.address);
-            commit();
-            Anybody.publish(); 
-          }
-
-          const newTotalAmtTransferred = totalAmtTransferred + amt;
-          [amtRemaining, totalAmtTransferred, recipientIdx] = [
-            amtRemaining - amt,  
-            newTotalAmtTransferred,
-            recipientIdx + 1, 
-          ];
-
-          continue;
-        }
-
-        if(validationOnly) {
-          const balanceExceeded = totalAmtTransferred > balance() || totalAmtTransferred > oTotal;
-          const insufficientAmtTransferred  = totalAmtTransferred < oTotal;
-
-          if(foundNonpositive || balanceExceeded || insufficientAmtTransferred) {
-            return false;
-          } else {
-            return true;
-          }
-        }
-      }
 
       const iBal = balance(); 
       const shouldPayRecipients = payAmts(recipients, orderTotal, iBal, false)
