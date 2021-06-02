@@ -71,53 +71,6 @@ const BuyerInterface = {
   ...errors
 };
 
-/**
- * Validates that recipients and associated transfer amts are valid.
- * 
- * @param {RecipientInterface[]} recips - The recipients. 
- * @param {Number} oTotal - The orderTotal. 
- * @returns {Bool} The result of the validation.`
- */
- const recipientsDataIsValid = (recips, oTotal) => {
-  const allValsPositive = recips.reduce(true, (z, x) => !z ? z : x.amtToReceive <= 0);
-  const totalTransfer = recips.reduce(0, (z, x) => z + x.amtToReceive);
-  
-  return allValsPositive && totalTransfer == oTotal
-}
-
-
-/**
- * Validate the transfer amounts or execute the transfers.
- * 
- * @param {RecipientInterface[]} recips - The recipients. 
- * @param {Number} oTotal - The orderTotal. 
- * @param {Number} initialBalance - The balance() at the time of execution. 
- * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
- */ 
-const payAmts = (recips, oTotal, initialBalance) => { 
-  assert(oTotal > 0);
-  assert(initialBalance > 0);
-  
-  var [amtRemaining, totalAmtTransferred, recipientIdx] = [oTotal, 0, 0] 
-  invariant(amtRemaining == oTotal - totalAmtTransferred &&  balance() == initialBalance - totalAmtTransferred)
-  while(recipientIdx < recips.length) { 
-    const recipient = recips[recipientIdx];   
-    const amt = recipient.amtToReceive;
-
-    transfer(recipient.amtToReceive).to(recipient.addr);
-    commit();
-    Anybody.publish(); 
-
-    [amtRemaining, totalAmtTransferred, recipientIdx] = [
-      amtRemaining - amt,  
-      totalAmtTransferred + amt,
-      recipientIdx + 1, 
-    ];
-
-    continue;
-  }
-}
-
 export const main = Reach.App(
   {}, [ Participant('Buyer', BuyerInterface) ],
   (Buyer) => {
@@ -135,20 +88,55 @@ export const main = Reach.App(
       // Unneeded but for the sake of sanity.
       assert(orderTotal > 0);
 
-      const shouldPayRecipients = recipientsDataIsValid(recipients, orderTotal);
+      // Validate that all order amounts are valid
+      const allValsPositive = recipients.reduce(true, (z, x) => !z ? z : x.amtToReceive > 0);
+      const totalTransfer = recipients.reduce(0, (z, x) => z + x.amtToReceive);
+      const shouldPayRecipients = allValsPositive && totalTransfer == orderTotal;
 
       if(!shouldPayRecipients) {
         Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
       } else {  
         // Unneeded but for the sake of sanity.
         assert(shouldPayRecipients == true);
+        assert(totalTransfer == orderTotal);
         
         commit();
         Buyer.publish().pay(orderTotal); 
-        payAmts(recipients, orderTotal, balance());
+        assert(balance() > 0);
+
+        // Transfer the funds
+        const initialBalance = balance();
+        var [amtRemaining, totalAmtTransferred, recipientIdx] = [orderTotal, 0, 0] 
+        // invariant(amtRemaining == orderTotal - totalAmtTransferred &&  balance() == initialBalance - totalAmtTransferred)
+        invariant(balance() == balance())
+
+        while(recipientIdx < recipients.length) { 
+          if(recipientIdx == 0) {
+            assert(balance() == initialBalance);
+            assert(amtRemaining == orderTotal);
+            assert(totalAmtTransferred == 0);   
+          } else {
+            assert(totalAmtTransferred > 0)
+          }
+       
+        
+          const recipient = recipients[recipientIdx];   
+          const amt = recipient.amtToReceive; 
+    
+          transfer(recipient.amtToReceive).to(recipient.addr);
+          commit();
+          Anybody.publish(); 
+      
+          [amtRemaining, totalAmtTransferred, recipientIdx] = [
+            amtRemaining - amt,  
+            totalAmtTransferred + amt,
+            recipientIdx + 1, 
+          ];
+      
+          continue;
+        }
       }
     }
-  
 
     commit();
   }
