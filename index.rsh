@@ -98,6 +98,13 @@ const BuyerInterface = {
 
   const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
 
+  if(validationOnly) {
+    const allValsPositive = recips.reduce(true, (f, x) => !f ? f : x.amtToReceive <= 0);
+    const totAmtTransfd = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
+    
+    return allValsPositive && totAmtTransfd == oTotal
+  }
+
   var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
   invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
   while(recipientIdx < recips.length && !foundNonpositive) { 
@@ -126,10 +133,10 @@ const BuyerInterface = {
   }
 
   if(validationOnly) {
-    const balanceExceeded = totalAmtTransferred > balance() || totalAmtTransferred > oTotal;
+    const balExceeded = totalAmtTransferred > balance() || totalAmtTransferred > oTotal;
     const insufficientAmtTransferred  = totalAmtTransferred < oTotal;
 
-    if(foundNonpositive || balanceExceeded || insufficientAmtTransferred) {
+    if(foundNonpositive || balExceeded || insufficientAmtTransferred) {
       return false;
     } else {
       return true;
