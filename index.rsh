@@ -61,9 +61,6 @@ const errors = {
   errorInvalidRecipientAmounts: Fun([], Null),
   errorGenericInvalidAmounts: Fun([], Null),
 }
-
-// Buyer.only(() => declassify(interact.errorInvalidRecipientAmounts()))
-
  
 const BuyerInterface = {
   orderTotal: UInt,
@@ -75,65 +72,49 @@ const BuyerInterface = {
 };
 
 /**
+ * Validates that recipients and associated transfer amts are valid.
+ * 
+ * @param {RecipientInterface[]} recips - The recipients. 
+ * @param {Number} oTotal - The orderTotal. 
+ * @returns {Bool} The result of the validation.`
+ */
+ const recipientsDataIsValid = (recips, oTotal) => {
+  const allValsPositive = recips.reduce(true, (z, x) => !z ? z : x.amtToReceive <= 0);
+  const totalTransfer = recips.reduce(0, (z, x) => z + x.amtToReceive);
+  
+  return allValsPositive && totalTransfer == oTotal
+}
+
+
+/**
  * Validate the transfer amounts or execute the transfers.
  * 
- * @param {RecipientInterface[]} recips - The recipients to validate/execute against. 
+ * @param {RecipientInterface[]} recips - The recipients. 
  * @param {Number} oTotal - The orderTotal. 
  * @param {Number} initialBalance - The balance() at the time of execution. 
- * @param {Bool} executeTransfers - Whether or not to transfer funds. If false, function will only validate. 
  * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
  */ 
-  const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
-  const validationOnly = !executeTransfers; 
-
-  // Unneeded but for the sake of sanity.
-  assert(validationOnly == !executeTransfers);
+const payAmts = (recips, oTotal, initialBalance) => { 
   assert(oTotal > 0);
-
-  if(validationOnly){
-    assert(initialBalance == 0);
-  } else {
-    assert(initialBalance > 0);
-  }
-
-  const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
-
-  var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
-  invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
-  while(recipientIdx < recips.length && !foundNonpositive) { 
+  assert(initialBalance > 0);
+  
+  var [amtRemaining, totalAmtTransferred, recipientIdx] = [oTotal, 0, 0] 
+  invariant(amtRemaining == oTotal - totalAmtTransferred &&  balance() == initialBalance - totalAmtTransferred)
+  while(recipientIdx < recips.length) { 
     const recipient = recips[recipientIdx];   
     const amt = recipient.amtToReceive;
 
-    if(validationOnly) {
-      if(amt <= 0) {
-        foundNonpositive = true;
-        continue;
-      }
-    } else { 
-      transfer(recipient.amtToReceive).to(recipient.address);
-      commit();
-      Anybody.publish(); 
-    }
+    transfer(recipient.amtToReceive).to(recipient.address);
+    commit();
+    Anybody.publish(); 
 
-    const newTotalAmtTransferred = totalAmtTransferred + amt;
     [amtRemaining, totalAmtTransferred, recipientIdx] = [
       amtRemaining - amt,  
-      newTotalAmtTransferred,
+      totalAmtTransferred + amt,
       recipientIdx + 1, 
     ];
 
     continue;
-  }
-
-  if(validationOnly) {
-    const balanceExceeded = totalAmtTransferred > balance() || totalAmtTransferred > oTotal;
-    const insufficientAmtTransferred  = totalAmtTransferred < oTotal;
-
-    if(foundNonpositive || balanceExceeded || insufficientAmtTransferred) {
-      return false;
-    } else {
-      return true;
-    }
   }
 }
 
@@ -154,8 +135,7 @@ export const main = Reach.App(
       // Unneeded but for the sake of sanity.
       assert(orderTotal > 0);
 
-      const iBal = balance(); 
-      const shouldPayRecipients = payAmts(recipients, orderTotal, iBal, false)
+      const shouldPayRecipients = recipientsDataIsValid(recipients, orderTotal);
 
       if(!shouldPayRecipients) {
         Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
@@ -165,7 +145,7 @@ export const main = Reach.App(
         
         commit();
         Buyer.publish().pay(orderTotal); 
-        payAmts(recipients, orderTotal, balance(), true);
+        payAmts(recipients, orderTotal, balance());
       }
     }
   
