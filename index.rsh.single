@@ -96,8 +96,8 @@ const payAmts = (recips, oTotal, initialBalance, executeTransfers) => {
     assert(initialBalance > 0);
   }
 
-  const balInv = (ib, tat, vo) => balance() == (vo ? balance() : ib - tat); 
-  
+  const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
+
   var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
   invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
   while(recipientIdx < recips.length && !foundNonpositive) { 
@@ -138,60 +138,38 @@ const payAmts = (recips, oTotal, initialBalance, executeTransfers) => {
 }
 
 export const main = Reach.App(
-  {}, [ ParticipantClass('Buyer', BuyerInterface) ],
+  {}, [ Participant('Buyer', BuyerInterface) ],
   (Buyer) => {
-    const [ keepGoing ] =
-      parallelReduce([ true ])
-        .invariant(balance() == balance())
-        .while(keepGoing)
-        .case(Buyer, 
-          (() => {
-            const [orderTotal, recipients] = [
-              interact.orderTotal, 
-              interact.getRecipients()
-            ];
-            
-            const positiveTotal = orderTotal > 0;
-            const positiveRecips = recipients.length > 0;
+    Buyer.only(() => {
+      const [orderTotal, recipients] = declassify([
+        interact.orderTotal, 
+        interact.getRecipients()])
+    });
+    Buyer.publish(orderTotal, recipients);
+    assert(recipients.length > 0);
 
-            if(!positiveTotal || !positiveRecips) {
-              interact.errorGenericInvalidAmounts();
-            } else {
-              assert(orderTotal > 0);
-              assert(recipients.length > 0);
-            }
+    if(orderTotal <= 0) {
+      Buyer.only(() => declassify(interact.errorInvalidOrderTotal()))
+    } else {
+      // Unneeded but for the sake of sanity.
+      assert(orderTotal > 0);
 
-            return {
-              when: positiveTotal && positiveRecips
-            }
-          }),
-          () => {
-            Buyer.only(() => {
-              const [orderTotal, recipients] = declassify([
-                interact.orderTotal, 
-                interact.getRecipients()])
-            });
-            Buyer.publish(orderTotal, recipients);
-            assert(orderTotal > 0);
-            assert(recipients.length > 0);
+      const iBal = balance(); 
+      const shouldPayRecipients = payAmts(recipients, orderTotal, iBal, false)
 
-            const shouldPayRecipients = payAmts(recipients, orderTotal, 0, false)
-
-            if(!shouldPayRecipients) {
-              Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
-            } else {  
-              // Unneeded but for the sake of sanity.
-              assert(shouldPayRecipients == true);
-              
-              commit();
-              Buyer.publish().pay(orderTotal); 
-              payAmts(recipients, orderTotal, balance(), true);
-            }
-
-            return [ true ]; 
-          }
-        );
+      if(!shouldPayRecipients) {
+        Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
+      } else {  
+        // Unneeded but for the sake of sanity.
+        assert(shouldPayRecipients == true);
+        
+        commit();
+        Buyer.publish().pay(orderTotal); 
+        payAmts(recipients, orderTotal, balance(), true);
+      }
+    }
   
+
     commit();
   }
 );
