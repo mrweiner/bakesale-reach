@@ -79,8 +79,8 @@ const BuyerInterface = {
  * @returns {Bool} The result of the validation.`
  */
  const recipientsDataIsValid = (recips, oTotal) => {
-  const allValsPositive = recips.reduce(true, (f, x) => !f ? f : x.amtToReceive <= 0);
-  const totalTransfer = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
+  const allValsPositive = recips.reduce(true, (z, x) => !z ? z : x.amtToReceive <= 0);
+  const totalTransfer = recips.reduce(0, (z, x) => z + x.amtToReceive);
   
   return allValsPositive && totalTransfer == oTotal
 }
