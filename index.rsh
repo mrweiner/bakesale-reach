@@ -80,67 +80,31 @@ const BuyerInterface = {
  * @param {RecipientInterface[]} recips - The recipients to validate/execute against. 
  * @param {Number} oTotal - The orderTotal. 
  * @param {Number} initialBalance - The balance() at the time of execution. 
- * @param {Bool} executeTransfers - Whether or not to transfer funds. If false, function will only validate. 
  * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
  */ 
-const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
-  const validationOnly = !executeTransfers; 
-
-  // Unneeded but for the sake of sanity.
-  assert(validationOnly == !executeTransfers);
+const payAmts = (recips, oTotal, initialBalance) => { 
   assert(oTotal > 0);
+  assert(initialBalance > 0);
+  
+  // const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
 
-  if(validationOnly){
-    assert(initialBalance == 0);
-  } else {
-    assert(initialBalance > 0);
-  }
-
-  const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
-
-  if(validationOnly) {
-    const allValsPositive = recips.reduce(true, (f, x) => !f ? f : x.amtToReceive <= 0);
-    const totAmtTransfd = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
-    
-    return allValsPositive && totAmtTransfd == oTotal
-  }
-
-  var [amtRemaining, totalAmtTransferred, recipientIdx, foundNonpositive] = [oTotal, 0, 0, false] 
-  invariant(amtRemaining == oTotal - totalAmtTransferred && balInv(initialBalance, totalAmtTransferred, validationOnly))
-  while(recipientIdx < recips.length && !foundNonpositive) { 
+  var [amtRemaining, totalAmtTransferred, recipientIdx] = [oTotal, 0, 0] 
+  invariant(amtRemaining == oTotal - totalAmtTransferred &&  balance() == initialBalance - totalAmtTransferred)
+  while(recipientIdx < recips.length) { 
     const recipient = recips[recipientIdx];   
     const amt = recipient.amtToReceive;
 
-    if(validationOnly) {
-      if(amt <= 0) {
-        foundNonpositive = true;
-        continue;
-      }
-    } else { 
-      transfer(recipient.amtToReceive).to(recipient.address);
-      commit();
-      Anybody.publish(); 
-    }
+    transfer(recipient.amtToReceive).to(recipient.address);
+    commit();
+    Anybody.publish(); 
 
-    const newTotalAmtTransferred = totalAmtTransferred + amt;
     [amtRemaining, totalAmtTransferred, recipientIdx] = [
       amtRemaining - amt,  
-      newTotalAmtTransferred,
+      totalAmtTransferred + amt,
       recipientIdx + 1, 
     ];
 
     continue;
-  }
-
-  if(validationOnly) {
-    const balExceeded = totalAmtTransferred > balance() || totalAmtTransferred > oTotal;
-    const insufficientAmtTransferred  = totalAmtTransferred < oTotal;
-
-    if(foundNonpositive || balExceeded || insufficientAmtTransferred) {
-      return false;
-    } else {
-      return true;
-    }
   }
 }
 
@@ -179,7 +143,7 @@ export const main = Reach.App(
         
         commit();
         Buyer.publish().pay(orderTotal); 
-        payAmts(recipients, orderTotal, balance(), true);
+        payAmts(recipients, orderTotal, balance());
       }
     }
   
