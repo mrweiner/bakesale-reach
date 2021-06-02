@@ -83,7 +83,7 @@ const BuyerInterface = {
  * @param {Bool} executeTransfers - Whether or not to transfer funds. If false, function will only validate. 
  * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
  */ 
-  const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
+const payAmts = (recips, oTotal, initialBalance, executeTransfers) => { 
   const validationOnly = !executeTransfers; 
 
   // Unneeded but for the sake of sanity.
@@ -144,6 +144,13 @@ const BuyerInterface = {
   }
 }
 
+const recipientsAreValid = (recips, oTotal) => {
+  const allValsPositive = recips.reduce(true, (f, x) => !f ? f : x.amtToReceive <= 0);
+  const totAmtTransfd = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
+  
+  return allValsPositive && totAmtTransfd == oTotal
+}
+
 export const main = Reach.App(
   {}, [ Participant('Buyer', BuyerInterface) ],
   (Buyer) => {
@@ -162,7 +169,7 @@ export const main = Reach.App(
       assert(orderTotal > 0);
 
       const iBal = balance(); 
-      const shouldPayRecipients = payAmts(recipients, orderTotal, iBal, false)
+      const shouldPayRecipients = recipientsAreValid(recipients, orderTotal);
 
       if(!shouldPayRecipients) {
         Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
