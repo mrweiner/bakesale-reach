@@ -106,19 +106,21 @@ const payAmts = (recips, oTotal, initialBalance, executeTransfers) => {
 
     if(validationOnly) {
       if(amt <= 0) {
+        commit();
+        Anybody.publish();
         foundNonpositive = true;
         continue;
       }
     } else { 
       transfer(recipient.amtToReceive).to(recipient.address);
-      commit();
-      Anybody.publish(); 
     }
 
-    const newTotalAmtTransferred = totalAmtTransferred + amt;
+    commit();
+    Anybody.publish(); 
+
     [amtRemaining, totalAmtTransferred, recipientIdx] = [
       amtRemaining - amt,  
-      newTotalAmtTransferred,
+      totalAmtTransferred + amt,
       recipientIdx + 1, 
     ];
 
@@ -140,16 +142,18 @@ const payAmts = (recips, oTotal, initialBalance, executeTransfers) => {
 export const main = Reach.App(
   {}, [ ParticipantClass('Buyer', BuyerInterface) ],
   (Buyer) => {
+    Anybody.publish();
+
     const [ keepGoing ] =
-      parallelReduce([ true ])
+      parallelReduce( [true] )
         .invariant(balance() == balance())
         .while(keepGoing)
         .case(Buyer, 
           (() => {
-            const [orderTotal, recipients] = [
+            const [orderTotal, recipients] = declassify([
               interact.orderTotal, 
               interact.getRecipients()
-            ];
+            ]);
             
             const positiveTotal = orderTotal > 0;
             const positiveRecips = recipients.length > 0;
@@ -166,16 +170,16 @@ export const main = Reach.App(
             }
           }),
           () => {
+            commit();
+
             Buyer.only(() => {
               const [orderTotal, recipients] = declassify([
                 interact.orderTotal, 
                 interact.getRecipients()])
             });
             Buyer.publish(orderTotal, recipients);
-            assert(orderTotal > 0);
-            assert(recipients.length > 0);
 
-            const shouldPayRecipients = payAmts(recipients, orderTotal, 0, false)
+            const shouldPayRecipients = payAmts(recipients, orderTotal, 0, false);
 
             if(!shouldPayRecipients) {
               Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
@@ -188,9 +192,9 @@ export const main = Reach.App(
               payAmts(recipients, orderTotal, balance(), true);
             }
 
-            return [ true ]; 
-          }
-        );
+            return [true]; 
+          })
+        .timeout(1000000000, () => { return [false] });
   
     commit();
   }
