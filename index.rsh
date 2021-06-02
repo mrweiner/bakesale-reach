@@ -61,9 +61,6 @@ const errors = {
   errorInvalidRecipientAmounts: Fun([], Null),
   errorGenericInvalidAmounts: Fun([], Null),
 }
-
-// Buyer.only(() => declassify(interact.errorInvalidRecipientAmounts()))
-
  
 const BuyerInterface = {
   orderTotal: UInt,
@@ -73,6 +70,21 @@ const BuyerInterface = {
   messagePaidRecipient: Fun([Address, UInt], Null),
   ...errors
 };
+
+/**
+ * Validates that recipients and associated transfer amts are valid.
+ * 
+ * @param {RecipientInterface[]} recips - The recipients. 
+ * @param {Number} oTotal - The orderTotal. 
+ * @returns {Bool} The result of the validation.`
+ */
+ const recipientsDataIsValid = (recips, oTotal) => {
+  const allValsPositive = recips.reduce(true, (f, x) => !f ? f : x.amtToReceive <= 0);
+  const totalTransfer = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
+  
+  return allValsPositive && totalTransfer == oTotal
+}
+
 
 /**
  * Validate the transfer amounts or execute the transfers.
@@ -86,8 +98,6 @@ const payAmts = (recips, oTotal, initialBalance) => {
   assert(oTotal > 0);
   assert(initialBalance > 0);
   
-  // const balInv = (ib, tat, vo) => balance() == (vo ? ib : ib - tat); 
-
   var [amtRemaining, totalAmtTransferred, recipientIdx] = [oTotal, 0, 0] 
   invariant(amtRemaining == oTotal - totalAmtTransferred &&  balance() == initialBalance - totalAmtTransferred)
   while(recipientIdx < recips.length) { 
@@ -106,20 +116,6 @@ const payAmts = (recips, oTotal, initialBalance) => {
 
     continue;
   }
-}
-
-/**
- * Validates that recipients and associated transfer amts are valid.
- * 
- * @param {RecipientInterface[]} recips - The recipients. 
- * @param {Number} oTotal - The orderTotal. 
- * @returns {Bool} The result of the validation.`
- */
-const recipientsDataIsValid = (recips, oTotal) => {
-  const allValsPositive = recips.reduce(true, (f, x) => !f ? f : x.amtToReceive <= 0);
-  const totalTransfer = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
-  
-  return allValsPositive && totalTransfer == oTotal
 }
 
 export const main = Reach.App(
