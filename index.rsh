@@ -77,7 +77,7 @@ const BuyerInterface = {
 /**
  * Validate the transfer amounts or execute the transfers.
  * 
- * @param {RecipientInterface[]} recips - The recipients to validate/execute against. 
+ * @param {RecipientInterface[]} recips - The recipients. 
  * @param {Number} oTotal - The orderTotal. 
  * @param {Number} initialBalance - The balance() at the time of execution. 
  * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
@@ -108,11 +108,18 @@ const payAmts = (recips, oTotal, initialBalance) => {
   }
 }
 
-const recipientsAreValid = (recips, oTotal) => {
+/**
+ * Validates that recipients and associated transfer amts are valid.
+ * 
+ * @param {RecipientInterface[]} recips - The recipients. 
+ * @param {Number} oTotal - The orderTotal. 
+ * @returns {Bool} The result of the validation.`
+ */
+const recipientsDataIsValid = (recips, oTotal) => {
   const allValsPositive = recips.reduce(true, (f, x) => !f ? f : x.amtToReceive <= 0);
-  const totAmtTransfd = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
+  const totalTransfer = recips.reduce(0, (tat, x) => tat + x.amtToReceive);
   
-  return allValsPositive && totAmtTransfd == oTotal
+  return allValsPositive && totalTransfer == oTotal
 }
 
 export const main = Reach.App(
@@ -132,8 +139,7 @@ export const main = Reach.App(
       // Unneeded but for the sake of sanity.
       assert(orderTotal > 0);
 
-      const iBal = balance(); 
-      const shouldPayRecipients = recipientsAreValid(recipients, orderTotal);
+      const shouldPayRecipients = recipientsDataIsValid(recipients, orderTotal);
 
       if(!shouldPayRecipients) {
         Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
