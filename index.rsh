@@ -51,7 +51,7 @@
 //
 
 const RecipientInterface = {
-  address: Address,
+  addr: Address,
   amtToReceive: UInt,
 };
 
@@ -104,7 +104,7 @@ const payAmts = (recips, oTotal, initialBalance) => {
     const recipient = recips[recipientIdx];   
     const amt = recipient.amtToReceive;
 
-    transfer(recipient.amtToReceive).to(recipient.address);
+    transfer(recipient.amtToReceive).to(recipient.addr);
     commit();
     Anybody.publish(); 
 
