@@ -65,8 +65,7 @@ const errors = {
 const BuyerInterface = {
   orderTotal: UInt,
   // https://docs.reach.sh/ref-programs-compute.html#%28reach._%28%28.Maybe%29%29%29
-  // getRecipients: Fun([], Array(Maybe(Object(RecipientInterface)), 5)),
-  getRecipients: Fun([], Array(Object(RecipientInterface), 200)), 
+  getRecipients: Fun([], Array(Maybe(Object(RecipientInterface)), 1000)),
   messagePaidRecipient: Fun([Address, UInt], Null),
   ...errors
 };
@@ -88,10 +87,36 @@ export const main = Reach.App(
       // Unneeded but for the sake of sanity.
       assert(orderTotal > 0);
 
-      // Validate that all order amounts are valid
-      const recipPercentsValid = recipients.reduce(true, (z, x) => !z ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
-      const totalTransferPercent = recipients.reduce(0, (z, x) => z + x.percentToReceive);
-      const shouldPayRecipients = recipPercentsValid && totalTransferPercent == 1;
+      // Begin validation
+      const buyerIsRecipient = recipients.reduce(false, (z, x) => {
+        return z
+          ? z
+          : fromMaybe(x,
+            (() => false), 
+            ((y) => y.addr == Buyer)
+          );
+      });
+
+      const recipientsClean = recipients.map((x) => {
+        return fromMaybe(x,
+          (() => ({
+            addr: Buyer,
+            percentToReceive: 0,
+            isOriginal: false
+          })), 
+          ((y) => ({
+            ...y,
+            isOriginal: true
+          }))
+        ); 
+      })
+      
+      const recipPercentsValid = recipientsClean.reduce(true, (z, x) => 
+        (!z || !x.isOriginal) ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
+      const totalTransferPercent = recipientsClean.reduce(0, (z, x) => 
+        !x.isOriginal ? z : z + x.percentToReceive);
+
+      const shouldPayRecipients = !buyerIsRecipient && recipPercentsValid && totalTransferPercent == 1;
 
       if(!shouldPayRecipients) {
         Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
@@ -106,13 +131,17 @@ export const main = Reach.App(
         // Transfer the funds
         var [totalAmtTransferred, recipientIdx, baseBal] = [0, 0, balance()] 
         invariant(balance() == baseBal - totalAmtTransferred)
-        while(recipientIdx < recipients.length) { 
+        while(recipientIdx < recipientsClean.length) { 
           // Cannot base our calculations off of the orderTotal directly
           // as the operable balance will be less due to fees.
           const bal = recipientIdx == 0 ? balance() : baseBal;        
-          const recipient = recipients[recipientIdx];   
+          const recipient = recipientsClean[recipientIdx];   
           const pct = recipient.percentToReceive;
           const amt = bal * pct; 
+
+          if(!recipient.isOriginal) {
+            assert(pct == 0 && amt == 0);
+          }
     
           transfer(amt).to(recipient.addr);
           commit();
