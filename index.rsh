@@ -52,7 +52,7 @@
 
 const RecipientInterface = {
   addr: Address,
-  amtToReceive: UInt,
+  percentToReceive: UInt,
 };
 
 const errors = {
@@ -66,57 +66,10 @@ const BuyerInterface = {
   orderTotal: UInt,
   // https://docs.reach.sh/ref-programs-compute.html#%28reach._%28%28.Maybe%29%29%29
   // getRecipients: Fun([], Array(Maybe(Object(RecipientInterface)), 5)),
-  getRecipients: Fun([], Array(Object(RecipientInterface), 1)),
+  getRecipients: Fun([], Array(Object(RecipientInterface), 200)), 
   messagePaidRecipient: Fun([Address, UInt], Null),
   ...errors
 };
-
-/**
- * Validates that recipients and associated transfer amts are valid.
- * 
- * @param {RecipientInterface[]} recips - The recipients. 
- * @param {Number} oTotal - The orderTotal. 
- * @returns {Bool} The result of the validation.`
- */
- const recipientsDataIsValid = (recips, oTotal) => {
-  const allValsPositive = recips.reduce(true, (z, x) => !z ? z : x.amtToReceive <= 0);
-  const totalTransfer = recips.reduce(0, (z, x) => z + x.amtToReceive);
-  
-  return allValsPositive && totalTransfer == oTotal
-}
-
-
-/**
- * Validate the transfer amounts or execute the transfers.
- * 
- * @param {RecipientInterface[]} recips - The recipients. 
- * @param {Number} oTotal - The orderTotal. 
- * @param {Number} initialBalance - The balance() at the time of execution. 
- * @returns {Bool|Null} - Bool result of validation, or nothing, based on executeTransfers.
- */ 
-const payAmts = (recips, oTotal, initialBalance) => { 
-  assert(oTotal > 0);
-  assert(initialBalance > 0);
-  
-  var [amtRemaining, totalAmtTransferred, recipientIdx] = [oTotal, 0, 0] 
-  invariant(amtRemaining == oTotal - totalAmtTransferred &&  balance() == initialBalance - totalAmtTransferred)
-  while(recipientIdx < recips.length) { 
-    const recipient = recips[recipientIdx];   
-    const amt = recipient.amtToReceive;
-
-    transfer(recipient.amtToReceive).to(recipient.addr);
-    commit();
-    Anybody.publish(); 
-
-    [amtRemaining, totalAmtTransferred, recipientIdx] = [
-      amtRemaining - amt,  
-      totalAmtTransferred + amt,
-      recipientIdx + 1, 
-    ];
-
-    continue;
-  }
-}
 
 export const main = Reach.App(
   {}, [ Participant('Buyer', BuyerInterface) ],
@@ -135,20 +88,46 @@ export const main = Reach.App(
       // Unneeded but for the sake of sanity.
       assert(orderTotal > 0);
 
-      const shouldPayRecipients = recipientsDataIsValid(recipients, orderTotal);
+      // Validate that all order amounts are valid
+      const recipPercentsValid = recipients.reduce(true, (z, x) => !z ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
+      const totalTransferPercent = recipients.reduce(0, (z, x) => z + x.percentToReceive);
+      const shouldPayRecipients = recipPercentsValid && totalTransferPercent == 1;
 
       if(!shouldPayRecipients) {
         Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
       } else {  
         // Unneeded but for the sake of sanity.
         assert(shouldPayRecipients == true);
+        assert(totalTransferPercent == 1);
         
         commit();
         Buyer.publish().pay(orderTotal); 
-        payAmts(recipients, orderTotal, balance());
+
+        // Transfer the funds
+        var [totalAmtTransferred, recipientIdx, baseBal] = [0, 0, balance()] 
+        invariant(balance() == baseBal - totalAmtTransferred)
+        while(recipientIdx < recipients.length) { 
+          // Cannot base our calculations off of the orderTotal directly
+          // as the operable balance will be less due to fees.
+          const bal = recipientIdx == 0 ? balance() : baseBal;        
+          const recipient = recipients[recipientIdx];   
+          const pct = recipient.percentToReceive;
+          const amt = bal * pct; 
+    
+          transfer(amt).to(recipient.addr);
+          commit();
+          Anybody.publish(); 
+      
+          [totalAmtTransferred, recipientIdx, baseBal] = [
+            totalAmtTransferred + amt,
+            recipientIdx + 1, 
+            bal
+          ];
+      
+          continue;
+        }
       }
     }
-  
 
     commit();
   }
