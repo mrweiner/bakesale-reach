@@ -91,8 +91,8 @@ export const main = Reach.App(
   (Buyer) => {
     Anybody.publish();
 
-    const [outerKeepGoing] = 
-      parallelReduce([true])
+    const outerKeepGoing = 
+      parallelReduce(true)
         .invariant(balance() == balance())
         .while(outerKeepGoing)
         .case(Buyer,
@@ -176,10 +176,15 @@ export const main = Reach.App(
               continue;
             }
 
-            return [true];
+            assert(balance() == 0)
+
+            return true;
           })
         )
-        .timeout(100^100, () => [false]);
+        .timeout(100^100, () => {
+          Anybody.publish();
+          return false;
+        });
     
     commit();
 
@@ -269,7 +274,5 @@ export const main = Reach.App(
     //     }
     //   }
     // }
-
-    commit();
   }
 );
