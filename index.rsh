@@ -65,7 +65,7 @@ const errors = {
 const BuyerInterface = {
   orderTotal: UInt,
   // https://docs.reach.sh/ref-programs-compute.html#%28reach._%28%28.Maybe%29%29%29
-  getRecipients: Fun([], Array(Maybe(Object(RecipientInterface)), 5)),
+  getRecipients: Fun([], Array(Maybe(Object(RecipientInterface)), 2)),
   messagePaidRecipient: Fun([Address, UInt], Null),
   ...errors
 };
@@ -86,6 +86,41 @@ const cleanRecipients = (r, b) => {
   })
 }
 
+const validateOrder = (orderTotal, recipients, buyer) => {
+  const positiveOrderTotal = orderTotal > 0;
+  // if(!positiveOrderTotal) {
+  //   Buyer.only(() => declassify(interact.errorInvalidOrderTotal()));
+  // }
+
+  const buyerIsRecipient = recipients.reduce(false, (z, x) => {
+    return z
+      ? z
+      : fromMaybe(x,
+        (() => false), 
+        ((y) => y.addr == buyer)
+      );
+  });
+
+  const recipientsClean = cleanRecipients(recipients, buyer);
+  
+  const recipPercentsValid = recipientsClean.reduce(true, (z, x) => 
+    (!z || !x.isReal) ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
+  const totalTransferPercent = recipientsClean.reduce(0, (z, x) => 
+    !x.isReal ? z : z + x.percentToReceive);
+
+  const shouldPayRecipients = positiveOrderTotal && !buyerIsRecipient && recipPercentsValid && totalTransferPercent == 1;
+
+  return {
+    orderTotal,
+    positiveOrderTotal,
+    buyerIsRecipient, 
+    recipientsClean,
+    recipPercentsValid,
+    totalTransferPercent,
+    shouldPayRecipients
+  }
+}
+
 export const main = Reach.App(
   {}, [ ParticipantClass('Buyer', BuyerInterface) ],
   (Buyer) => {
@@ -101,40 +136,19 @@ export const main = Reach.App(
               interact.orderTotal, 
               interact.getRecipients()])
 
-            const positiveOrderTotal = orderTotal > 0;
-            // if(!positiveOrderTotal) {
-            //   Buyer.only(() => declassify(interact.errorInvalidOrderTotal()));
-            // }
+            const validationResult = validateOrder(orderTotal, recipients, Buyer);
 
-            const buyerIsRecipient = recipients.reduce(false, (z, x) => {
-              return z
-                ? z
-                : fromMaybe(x,
-                  (() => false), 
-                  ((y) => y.addr == Buyer)
-                );
-            });
-      
-            const recipientsClean = cleanRecipients(recipients, Buyer);
-            
-            const recipPercentsValid = recipientsClean.reduce(true, (z, x) => 
-              (!z || !x.isReal) ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
-            const totalTransferPercent = recipientsClean.reduce(0, (z, x) => 
-              !x.isReal ? z : z + x.percentToReceive);
-      
-            const shouldPayRecipients = positiveOrderTotal && !buyerIsRecipient && recipPercentsValid && totalTransferPercent == 1;
-            if(!shouldPayRecipients) {
+            if(!validationResult.shouldPayRecipients) {
               interact.errorGenericInvalidAmounts();
             } else {
-              assert(orderTotal > 0);
-              assert(totalTransferPercent == 1);
+              assert(validationResult.orderTotal > 0);
+              assert(validationResult.totalTransferPercent == 1);
             }
 
             return {
-              when: shouldPayRecipients
+              when: validationResult.shouldPayRecipients
             }
           }), 
-          ((_) => 0),
           ((_) => {
             commit();
             Buyer.only(() => {
@@ -142,46 +156,72 @@ export const main = Reach.App(
                 interact.orderTotal, 
                 interact.getRecipients()]) 
             });
-            Buyer.publish(orderTotal, recipients)
-              .pay(orderTotal);
+            Buyer.publish(orderTotal, recipients);
+            const validationResult = validateOrder(orderTotal, recipients, this);
+            commit();
+            Anybody.publish();
 
-            const recipientsClean = cleanRecipients(recipients, this);
-    
-            // Transfer the funds
-            var [totalAmtTransferred, recipientIdx, baseBal] = [0, 0, balance()];
-            invariant((balance() == baseBal - totalAmtTransferred) && outerKeepGoing == true);
-            while(recipientIdx < recipientsClean.length) { 
-    
-              // Cannot base our calculations off of the orderTotal directly
-              // as the operable balance will be slightly less due to fees.
-              const bal = baseBal > recipientIdx == 0 ? balance() : baseBal;        
-              const recipient = recipientsClean[recipientIdx];   
-              const pct = recipient.percentToReceive;
-              const amt = bal * pct; 
-    
-              if(!recipient.isReal) {
-                assert(pct == 0 && amt == 0);
-              }
-        
-              transfer(amt).to(recipient.addr);
+            if(!validationResult.shouldPayRecipients) {
+              Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
+              return true;
+            } else {
+              assert(validationResult.orderTotal > 0);
+              assert(validationResult.totalTransferPercent == 1);
+              
               commit();
-              Anybody.publish(); 
+              Buyer.publish().pay(orderTotal);
+      
+              // Transfer the funds
+              // var [totalAmtTransferred, recipientIdx, baseBal] = [0, 0, balance()];
+              var [totalAmtTransferred, recipientIdx] = [0, 0];
+              // invariant((balance() == baseBal - totalAmtTransferred) && outerKeepGoing == true);
+              invariant((balance() == balance()) && outerKeepGoing == true);
+              while(recipientIdx < validationResult.recipientsClean.length) { 
+                // Cannot base our calculations off of the orderTotal directly
+                // as the operable balance will be slightly less due to fees.
+                // const bal = baseBal > recipientIdx == 0 ? balance() : baseBal;        
+                const recipient = validationResult.recipientsClean[recipientIdx];   
+                const pct = recipient.percentToReceive;
+                const amt = orderTotal * pct; 
+      
+                if(!recipient.isReal) {
+                  assert(pct == 0);
+                  assert(amt == 0);
+                } else {
+                  assert(pct != 0);
+                  assert(amt != 0);
+                }
           
-              [totalAmtTransferred, recipientIdx, baseBal] = [
-                totalAmtTransferred + amt,
-                recipientIdx + 1, 
-                bal
-              ];
-          
-              continue;
+                transfer(amt).to(recipient.addr);
+                commit();
+                Anybody.publish(); 
+                
+                const newTotalTransfd =  totalAmtTransferred + amt;
+                const newRecipientId = recipientIdx + 1;
+
+                if(newRecipientId == validationResult.recipientsClean.length) {
+                  assert(totalAmtTransferred == orderTotal && balance() == 0);
+                }
+
+                // [totalAmtTransferred, recipientIdx, baseBal] = [
+                //   totalAmtTransferred + amt,
+                //   recipientIdx + 1, 
+                //   bal
+                // ];
+                [totalAmtTransferred, recipientIdx] = [
+                  newTotalTransfd,
+                  newRecipientId
+                ];
+            
+                continue;
+              }
+
+              return true;
             }
-
-            assert(balance() == 0)
-
-            return true;
           })
         )
         .timeout(100^100, () => {
+          assert(balance() == 0)
           Anybody.publish();
           return false;
         });
