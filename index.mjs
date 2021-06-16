@@ -27,8 +27,10 @@ import * as backend from './build/index.main.mjs';
           newRecipient(r1.networkAccount, 10),
           newRecipient(r2.networkAccount, 10),
           newRecipient(r3.networkAccount, 10),
-          newRecipient(r4.networkAccount, 10),
-          newRecipient(r5.networkAccount, 10)
+          null,
+          null
+          // newRecipient(r4.networkAccount, 10),
+          // newRecipient(r5.networkAccount, 10)
         ]
       },
       alertPaidRecipient: (addr, amt) => {
@@ -36,6 +38,4 @@ import * as backend from './build/index.main.mjs';
       }
     }),
   ]);
-
-  console.log('Hello, Alice and Bob!');
 })();
