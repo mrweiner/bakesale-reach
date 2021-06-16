@@ -36,6 +36,4 @@ import * as backend from './build/index.main.mjs';
       }
     }),
   ]);
-
-  console.log('Hello, Alice and Bob!');
 })();
