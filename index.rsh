@@ -50,72 +50,241 @@
 // 4d. Pay remainder to the merchant
 //
 
-const RecipientInterface = {
+// ========================================================
+// Constants
+// ========================================================
+
+// Since reach cannot really handle floating point numbers.
+const BAKESALE_FEE_PERCENT = 5; 
+const BASESALE_FEE_MULTIPLE = BAKESALE_FEE_PERCENT / 100;
+const MAYBE_ARR_LENGTH = 5;
+
+
+// ========================================================
+// Primary Objects & Their Fakers
+// ========================================================
+
+/**
+ * The beneficiary of a particular item.
+ */
+const Beneficiary = {
   addr: Address,
   percentToReceive: UInt,
 };
 
-const errors = {
+/**
+ * Create a fake benficiary.
+ * 
+ * @param addr
+ *   The fake address. Should be the buyer. 
+ * @returns 
+ *   The fake Beneficiary.
+ */
+const createFakeBeneficiary = (addr) => ({
+  addr,
+  percentToReceive: 0
+})
+
+/**
+ * An order line item.
+ */
+const LineItem = {
+  totalCost: UInt, // The unit price * qty
+  shipping: UInt,
+  tax: UInt,
+  beneficiaries: Array(Maybe(Object(Beneficiary)), MAYBE_ARR_LENGTH)
+}
+
+/**
+ * Create a fake LineItem.
+ * 
+ * @param addr
+ *   The fake address. Should be the buyer. 
+ * @returns 
+ *   The fake LineItem.
+ */
+const createFakeLineItem = (addr) => ({
+  isReal: false,
+  totalCost: UInt, // The unit price * qty
+  shipping: UInt,
+  tax: UInt,
+  beneficiaries: Array.iota(MAYBE_ARR_LENGTH).map(() => createFakeBeneficiary(buyer))
+});
+
+/**
+ * Array of order line items for a particular merchant.
+ */
+const MerchantItems = {
+  addr: Address,
+  lineItems: Array(Maybe(Object(LineItem)), MAYBE_ARR_LENGTH)
+}
+
+/**
+ * Create a fake MerchantItems.
+ * 
+ * @param addr
+ *   The fake address. Should be the buyer. 
+ * @returns 
+ *   The fake MerchantItems obj.
+ */
+ const createFakeMerchantItems = (addr) => ({
+  isReal: false,
+  addr: Address,
+  lineItems: Array.iota(MAYBE_ARR_LENGTH).map(() => createFakeLineItem(buyer))
+});
+
+/**
+ * The order data for which payment is processed.
+ */
+const OrderData = {
+  merchantItems: Array(Maybe(Object(MerchantItems)), MAYBE_ARR_LENGTH),
+  orderTotal: UInt,
+}
+
+
+// ========================================================
+// Repair Functions
+// ========================================================
+
+/**
+ * Create an "isReal" version of an object.
+ * 
+ * @param x
+ *   The object to clarify as real 
+ * @returns {object}
+ *   The initial object with an isReal prop added.
+ */
+const createIsReal = (x) => ({
+  isReal: true,
+  ...x
+});
+
+/**
+ * Convert Array(Maybe(Object(Beneficiary)) to usable [Object].
+ * 
+ * @param {Array(Maybe(Object(Beneficiary))} beneficiaries
+ *   The array of maybe beneficiaries.
+ * @param buyer 
+ *   The address to be used for the fakes.
+ * @returns 
+ *   Array of usable "isReal" beneficiaries
+ */
+ const repairBeneficiaries = (beneficiaries, buyer) => {
+  return beneficiaries.map((x) => {
+    return fromMaybe(x,
+      (() => createFakeBeneficiary(buyer)), 
+      ((y) => createIsReal(y))
+    ); 
+  })
+}
+
+/**
+ * Convert Array(Maybe(Object(LineItem)) to usable [Object].
+ * 
+ * @param {Array(Maybe(Object(LineItem))} lis
+ *   The array of maybe LineItems.
+ * @param buyer 
+ *   The address to be used for any fake addresses.
+ * @returns 
+ *   Array of usable "isReal" LineItems
+ */
+const repairLineItems = (lis, buyer) => {
+  return lis.map((x) => {
+    return fromMaybe(x,
+      (() => createFakeLineItem(buyer)), 
+      ((y) => createIsReal(y))
+    ); 
+  })
+}
+
+/**
+ * Convert Array(Maybe(Object(MerchantItems)) to usable [Object].
+ * 
+ * @param {Array(Maybe(Object(MerchantItems))} mis
+ *   The array of maybe LineItems.
+ * @param buyer 
+ *   The address to be used for any fake addresses.
+ * @returns 
+ *   Array of usable "isReal" LineItems
+ */
+const repairMerchantItems = (mis, buyer) => {
+  return mis.map((x) => {
+    return fromMaybe(x,
+      (() => createFakeMerchantItems(buyer)), 
+      ((y) => createIsReal(y))
+    ); 
+  })
+}
+
+
+// ========================================================
+// Order Validation
+// ========================================================
+
+/**
+ * 
+ * @param orderData 
+ * @param buyer 
+ */
+const validateOrder = (orderData, buyer) => {
+
+  // const positiveOrderTotal = orderTotal > 0;
+  // const buyerIsRecipient = recipients.reduce(false, (z, x) => {
+  //   return z
+  //     ? z
+  //     : fromMaybe(x,
+  //       (() => false), 
+  //       ((y) => y.addr == buyer)
+  //     );
+  // });
+
+  // const recipientsClean = cleanRecipients(recipients, buyer);
+  
+  // const recipPercentsValid = recipientsClean.reduce(true, (z, x) => 
+  //   (!z || !x.isReal) ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
+  // const totalTransferPercent = recipientsClean.reduce(0, (z, x) => 
+  //   !x.isReal ? z : z + x.percentToReceive);
+
+  // const shouldPayRecipients = positiveOrderTotal && !buyerIsRecipient && recipPercentsValid && totalTransferPercent == 1;
+
+  // return {
+  //   orderTotal,
+  //   positiveOrderTotal,
+  //   buyerIsRecipient, 
+  //   recipientsClean,
+  //   recipPercentsValid,
+  //   totalTransferPercent,
+  //   shouldPayRecipients
+  // }
+}
+
+
+// ========================================================
+// Participant Info
+// ========================================================
+
+/**
+ * Errors to present to the buyer on validation or other failure.
+ */
+ const errors = {
   errorInvalidOrderTotal: Fun([], Null),
   errorAmountsExceedBalance: Fun([], Null),
   errorInvalidRecipientAmounts: Fun([], Null),
   errorGenericInvalidAmounts: Fun([], Null),
 }
  
-const BuyerInterface = {
-  orderTotal: UInt,
-  // https://docs.reach.sh/ref-programs-compute.html#%28reach._%28%28.Maybe%29%29%29
-  getRecipients: Fun([], Array(Maybe(Object(RecipientInterface)), 5)),
-  alertPaidRecipient: Fun([Address, UInt], Null),
+/**
+ * The Buyer Interface.
+ */
+const BuyerInterface = { 
+  getOrderData: Fun([], Object(OrderData)),
   ...errors
 };
 
-const cleanRecipients = (r, b) => {
-  return r.map((x) => {
-    return fromMaybe(x,
-      (() => ({
-        addr: b,
-        percentToReceive: 0,
-        isReal: false
-      })), 
-      ((y) => ({
-        ...y,
-        isReal: true
-      }))
-    ); 
-  })
-}
 
-const validateOrder = (orderTotal, recipients, buyer) => {
-  const positiveOrderTotal = orderTotal > 0;
-  const buyerIsRecipient = recipients.reduce(false, (z, x) => {
-    return z
-      ? z
-      : fromMaybe(x,
-        (() => false), 
-        ((y) => y.addr == buyer)
-      );
-  });
-
-  const recipientsClean = cleanRecipients(recipients, buyer);
-  
-  const recipPercentsValid = recipientsClean.reduce(true, (z, x) => 
-    (!z || !x.isReal) ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
-  const totalTransferPercent = recipientsClean.reduce(0, (z, x) => 
-    !x.isReal ? z : z + x.percentToReceive);
-
-  const shouldPayRecipients = positiveOrderTotal && !buyerIsRecipient && recipPercentsValid && totalTransferPercent == 1;
-
-  return {
-    orderTotal,
-    positiveOrderTotal,
-    buyerIsRecipient, 
-    recipientsClean,
-    recipPercentsValid,
-    totalTransferPercent,
-    shouldPayRecipients
-  }
-}
+// ========================================================
+// Main Contract Logic
+// ========================================================
 
 export const main = Reach.App(
   {}, [ 
