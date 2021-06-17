@@ -222,6 +222,46 @@ const repairMerchantItems = (mis, buyer) => {
   })
 }
 
+/**
+ * Repair the entire orderData's tree.
+ * 
+ * @param {OrderData} orderData
+ *   The order data to be repaired. 
+ * @param {Address} buyer 
+ *   The order's buyer.
+ * 
+ * @returns {OrderData}
+ *   The repaired OrderData. 
+ */
+const repairOrderData = (orderData, buyer) => {
+  const merchantItemsRaw = orderData.merchantItems.reduce([], (miRaw, x) => {
+    // Repairing LineItems for single MerchantItem
+    const lineItemsRaw = x.reduce([], (liRaw, y) => {
+      // Repairing Benficiaries for a single LineItem
+      const beneficiariesRepaired = repairBeneficiaries(liRaw.beneficiaries, buyer);
+
+      return {
+        totalCost: y.totalCost, // The unit price * qty
+        shipping: y.shipping,
+        tax: y.tax,
+        beneficiaries: beneficiariesRepaired
+      }
+    });
+    const lineItemsRepaired = repairLineItems(lineItemsRaw, buyer);
+    
+    return {
+      addr: miRaw.addr,
+      lineItems: lineItemsRepaired
+    }
+  });
+
+  const merchantItemsRepaired = repairMerchantItems(merchantItemsRaw, buyer);
+  return {
+    orderTotal: orderData.orderTotal,
+    merchantItems: merchantItemsRepaired 
+  }
+}
+
 
 // ========================================================
 // Order Validation
