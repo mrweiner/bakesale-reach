@@ -268,29 +268,32 @@ const repairOrderData = (orderData, buyer) => {
 // ========================================================
 
 /**
+ * Check whether or not the order is valid to be processed.
  * 
- * @param orderData 
- * @param buyer 
+ * @param {OrderData} orderData
+ *   The REPAIRED order data. The logic assumes that all
+ *   objects are operable, i.e. no Maybes.
  */
-const validateOrder = (orderData, buyer) => {
+const validateRepairedOrder = (orderData) => {
   const positiveOrderTotal = orderData.orderTotal > 0;
   const orderTotalCalcd = orderData.merchantItems.reduce(0, (oTotal, x) => {
     const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => mTotal + y.totalCost);
     return oTotal + merchantTotal;
   });
 
+  // Ensure that the provided order total matches the order contents.
   const orderTotalsMatch = positiveOrderTotal == orderTotalCalcd;
 
   // All amounts on the order must be >= 0.
-  const allAmtsNonNegative = orderData.merchantItems.reduce(true, (isPositive, x) => {
-    const merchantAmtsPositive = x.lineItems.reduce(0, (mTotal, y) => {
+  const allAmtsNonNegative = orderData.merchantItems.reduce(true, (allAmtsPos, x) => {
+    const itemsPositive = x.lineItems.reduce(true, (ip, y) => {
       const totalCostValid = y.isReal ? y.totalCost > 0 : y.totalCost == 0
-      return totalCostValid 
+      return !ip ? false : totalCostValid 
         && y.shipping >= 0
         && y.tax >= 0
     });
 
-    return !isPositive ? isPositive : merchantAmtsPositive;
+    return !allAmtsPos ? false : itemsPositive;
   });
 
   // Any individual item's beneficiary percentages need to be <= 100.
@@ -300,32 +303,34 @@ const validateOrder = (orderData, buyer) => {
         return pctTotal + z.percentToReceive;
       });
       
-      return beneficiariesPct <= 100;
+      return !itemPctValid ? false : beneficiariesPct <= 100;
     });
-
-    return !pctsValid ? pctsValid : itemPctValid;
+ 
+    return !pctsValid ? false : itemPctsValid;
   });
 
-  // Any individual item's tax + shipping must be less than the order item's totalCost.Address
+  // Any individual items' tax + shipping must be less than the order item's totalCost.
+  // If they exceed it then that means the total does not account for one of them.
+  const taxShippingValid = orderData.merchantItems.reduce(true, (tsValid, x) => {
+    const itemTsValid = x.lineItems.reduce(true, (itemTsValid, y) => {      
+      return y.totalCost > y.tax + y.shipping;
+    });
 
-  // const recipientsClean = cleanRecipients(recipients, buyer);
-  
-  // const recipPercentsValid = recipientsClean.reduce(true, (z, x) => 
-  //   (!z || !x.isReal) ? z : 0 < x.percentToReceive && x.percentToReceive < 1);
-  // const totalTransferPercent = recipientsClean.reduce(0, (z, x) => 
-  //   !x.isReal ? z : z + x.percentToReceive);
+    return !tsValid ? false : itemTsValid;
+  });
 
-  // const shouldPayRecipients = positiveOrderTotal && !buyerIsRecipient && recipPercentsValid && totalTransferPercent == 1;
+  const orderIsValid = orderTotalsMatch 
+    && allAmtsNonNegative
+    && beneficiaryPctsValid
+    && taxShippingValid;
 
-  // return {
-  //   orderTotal,
-  //   positiveOrderTotal,
-  //   buyerIsRecipient, 
-  //   recipientsClean,
-  //   recipPercentsValid,
-  //   totalTransferPercent,
-  //   shouldPayRecipients
-  // }
+  return {
+    orderIsValid,
+    orderTotalsMatch, 
+    allAmtsNonNegative,
+    beneficiaryPctsValid,
+    taxShippingValid
+  }
 }
 
 
@@ -359,7 +364,7 @@ const BuyerInterface = {
 export const main = Reach.App(
   {}, [ 
     ParticipantClass('Buyer', BuyerInterface),
-    Participant('Bakesale', BuyerInterface),
+    Participant('Bakesale', {}),
   ],
   (Buyer, Bakesale) => {
     Bakesale.publish();
