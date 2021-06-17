@@ -273,16 +273,40 @@ const repairOrderData = (orderData, buyer) => {
  * @param buyer 
  */
 const validateOrder = (orderData, buyer) => {
+  const positiveOrderTotal = orderData.orderTotal > 0;
+  const orderTotalCalcd = orderData.merchantItems.reduce(0, (oTotal, x) => {
+    const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => mTotal + y.totalCost);
+    return oTotal + merchantTotal;
+  });
 
-  // const positiveOrderTotal = orderTotal > 0;
-  // const buyerIsRecipient = recipients.reduce(false, (z, x) => {
-  //   return z
-  //     ? z
-  //     : fromMaybe(x,
-  //       (() => false), 
-  //       ((y) => y.addr == buyer)
-  //     );
-  // });
+  const orderTotalsMatch = positiveOrderTotal == orderTotalCalcd;
+
+  // All amounts on the order must be >= 0.
+  const allAmtsNonNegative = orderData.merchantItems.reduce(true, (isPositive, x) => {
+    const merchantAmtsPositive = x.lineItems.reduce(0, (mTotal, y) => {
+      const totalCostValid = y.isReal ? y.totalCost > 0 : y.totalCost == 0
+      return totalCostValid 
+        && y.shipping >= 0
+        && y.tax >= 0
+    });
+
+    return !isPositive ? isPositive : merchantAmtsPositive;
+  });
+
+  // Any individual item's beneficiary percentages need to be <= 100.
+  const beneficiaryPctsValid = orderData.merchantItems.reduce(true, (pctsValid, x) => {
+    const itemPctsValid = x.lineItems.reduce(true, (itemPctValid, y) => {
+      const beneficiariesPct = y.beneficiaries.reduce(0, (pctTotal, z) => {
+        return pctTotal + z.percentToReceive;
+      });
+      
+      return beneficiariesPct <= 100;
+    });
+
+    return !pctsValid ? pctsValid : itemPctValid;
+  });
+
+  // Any individual item's tax + shipping must be less than the order item's totalCost.Address
 
   // const recipientsClean = cleanRecipients(recipients, buyer);
   
