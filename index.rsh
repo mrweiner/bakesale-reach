@@ -117,7 +117,7 @@ const createFakeLineItem = (addr) => {
 /**
  * Array of order line items for a particular merchant.
  */
-const MerchantItems = {
+const MerchantItem = {
   addr: Address,
   lineItems: Array(Maybe(Object(LineItem)), MAYBE_ARR_LENGTH)
 }
@@ -141,8 +141,8 @@ const MerchantItems = {
  * The order data for which payment is processed.
  */
 const OrderData = {
-  merchantItems: Array(Maybe(Object(MerchantItems)), MAYBE_ARR_LENGTH),
   orderTotal: UInt,
+  merchantItems: Array(Maybe(Object(MerchantItem)), MAYBE_ARR_LENGTH),
 }
 
 
