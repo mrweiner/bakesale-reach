@@ -80,10 +80,12 @@ const Beneficiary = {
  * @returns 
  *   The fake Beneficiary.
  */
-const createFakeBeneficiary = (addr) => ({
-  addr,
-  percentToReceive: 0
-})
+const createFakeBeneficiary = (addr) => {
+  return createIsReal(false, {
+    addr,
+    percentToReceive: 0}
+  );
+}
 
 /**
  * An order line item.
@@ -103,13 +105,14 @@ const LineItem = {
  * @returns 
  *   The fake LineItem.
  */
-const createFakeLineItem = (addr) => ({
-  isReal: false,
-  totalCost: UInt, // The unit price * qty
-  shipping: UInt,
-  tax: UInt,
-  beneficiaries: Array.iota(MAYBE_ARR_LENGTH).map(() => createFakeBeneficiary(buyer))
-});
+const createFakeLineItem = (addr) => {
+  return createIsReal(false, {
+    totalCost: UInt, // The unit price * qty
+    shipping: UInt,
+    tax: UInt,
+    beneficiaries: Array.iota(MAYBE_ARR_LENGTH).map(() => createFakeBeneficiary(buyer))}
+  );
+}
 
 /**
  * Array of order line items for a particular merchant.
@@ -127,11 +130,12 @@ const MerchantItems = {
  * @returns 
  *   The fake MerchantItems obj.
  */
- const createFakeMerchantItems = (addr) => ({
-  isReal: false,
-  addr: Address,
-  lineItems: Array.iota(MAYBE_ARR_LENGTH).map(() => createFakeLineItem(buyer))
-});
+ const createFakeMerchantItems = (addr) => {
+  return createIsReal(false, {
+    addr: Address,
+    lineItems: Array.iota(MAYBE_ARR_LENGTH).map(() => createFakeLineItem(buyer))}
+  );
+ } 
 
 /**
  * The order data for which payment is processed.
@@ -149,13 +153,15 @@ const OrderData = {
 /**
  * Create an "isReal" version of an object.
  * 
- * @param x
- *   The object to clarify as real 
+ * @param {object} x
+ *   The object to clarify as real. 
+ * @param {bool} state
+ *   Whether or not the object is real.
  * @returns {object}
  *   The initial object with an isReal prop added.
  */
-const createIsReal = (x) => ({
-  isReal: true,
+const createIsReal = (state, x) => ({
+  isReal: state,
   ...x
 });
 
@@ -173,7 +179,7 @@ const createIsReal = (x) => ({
   return beneficiaries.map((x) => {
     return fromMaybe(x,
       (() => createFakeBeneficiary(buyer)), 
-      ((y) => createIsReal(y))
+      ((y) => createIsReal(true, y))
     ); 
   })
 }
@@ -192,7 +198,7 @@ const repairLineItems = (lis, buyer) => {
   return lis.map((x) => {
     return fromMaybe(x,
       (() => createFakeLineItem(buyer)), 
-      ((y) => createIsReal(y))
+      ((y) => createIsReal(true, y))
     ); 
   })
 }
@@ -211,7 +217,7 @@ const repairMerchantItems = (mis, buyer) => {
   return mis.map((x) => {
     return fromMaybe(x,
       (() => createFakeMerchantItems(buyer)), 
-      ((y) => createIsReal(y))
+      ((y) => createIsReal(true, y))
     ); 
   })
 }
