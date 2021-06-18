@@ -50,6 +50,8 @@
 // 4d. Pay remainder to the merchant
 //
 
+"reach 0.1";
+
 // ========================================================
 // Constants
 // ========================================================
@@ -58,14 +60,9 @@
 const BAKESALE_FEE_PERCENT = 5; 
 const BAKESALE_FEE_MULTIPLE = BAKESALE_FEE_PERCENT / 100;
 
-const MAX_BENEFICIARIES_PER_ITEM = 5;
-const MAX_LINE_ITEMS_PER_MERCHANT = 10;
-const MAX_TOTAL_MERCHANTS = 5
-
-// // Merchant totals are equivalent but used in different contexts.
-// const TOTAL_MERCHANTS = MAX_TOTAL_MERCHANTS;
-// const TOTAL_LINE_ITEMS = MAX_LINE_ITEMS_PER_MERCHANT * TOTAL_MERCHANTS;
-// const TOTAL_BENEFICIARIES = MAX_BENEFICIARIES_PER_ITEM * TOTAL_LINE_ITEMS;
+const MAX_BENEFICIARIES_PER_ITEM = 1;
+const MAX_LINE_ITEMS_PER_MERCHANT = 1;
+const MAX_TOTAL_MERCHANTS = 1;
 
 // ========================================================
 // Primary Objects & Their Fakers
@@ -99,7 +96,7 @@ const Beneficiary = {
  * Create a fake benficiary.
  * 
  * @param addr
- *   The fake address. Should be the buyer. 
+ *   The fake address. 
  * @returns 
  *   The fake Beneficiary.
  */
@@ -125,7 +122,7 @@ const LineItem = {
  * Create a fake LineItem.
  * 
  * @param addr
- *   The fake address. Should be the buyer. 
+ *   The fake address.
  * @returns 
  *   The fake LineItem.
  */
@@ -143,21 +140,21 @@ const createFakeLineItem = (addr) => {
 /**
  * Array of order line items for a particular merchant.
  */
-const MerchantItem = {
+const Merchant = {
   isReal: Bool,
   addr: Address,
   lineItems: Array(Maybe(Object(LineItem)), MAX_LINE_ITEMS_PER_MERCHANT) 
 }
 
 /**
- * Create a fake MerchantItems.
+ * Create a fake Merchants.
  * 
  * @param addr
- *   The fake address. Should be the buyer. 
+ *   The fake address. 
  * @returns 
- *   The fake MerchantItems obj.
+ *   The fake Merchants obj.
  */
- const createFakeMerchantItems = (addr) => {
+ const createFakeMerchants = (addr) => {
   assert(addr !== null)
  
   return createIsReal(false, { 
@@ -172,23 +169,23 @@ const MerchantItem = {
  */
 const OrderData = {
   orderTotal: UInt,
-  merchantItems: Array(Maybe(Object(MerchantItem)), MAX_TOTAL_MERCHANTS),
+  merchantItems: Array(Maybe(Object(Merchant)), MAX_TOTAL_MERCHANTS),
 }
 
 
 // ========================================================
-// Clean Functions
+// Laundromat
 // ========================================================
 
 /**
- * Convert Array(Maybe(Object(Beneficiary)) to usable [Object].
+ * Convert Array(Maybe(Object(Beneficiary)) to usable Array(Object(Beneficiary)).
  * 
  * @param {Array(Maybe(Object(Beneficiary))} beneficiaries
  *   The array of maybe beneficiaries.
  * @param addr 
  *   The address to be used for the fakes.
- * @returns 
- *   Array of usable "isReal" beneficiaries
+ * @returns {Array(Object(Beneficiary)}
+ *   Array of usable beneficiaries.
  */
  const cleanBeneficiaries = (beneficiaries, addr) => {
   return beneficiaries.map((x) => {
@@ -200,14 +197,14 @@ const OrderData = {
 }
 
 /**
- * Convert Array(Maybe(Object(LineItem)) to usable [Object].
+ * Convert Array(Maybe(Object(LineItem)) to usable Array(Object(LineItem)).
  * 
  * @param {Array(Maybe(Object(LineItem))} lis
- *   The array of maybe LineItems.
+ *   The array of maybe line items.
  * @param addr 
- *   The address to be used for any fake addresses.
- * @returns 
- *   Array of usable "isReal" LineItems
+ *   The address to be used for the fakes.
+ * @returns {Array(Object(LineItem)}
+ *   Array of usable line items.
  */
 const cleanLineItems = (lis, addr) => {
   return lis.map((x) => {
@@ -219,19 +216,19 @@ const cleanLineItems = (lis, addr) => {
 }
 
 /**
- * Convert Array(Maybe(Object(MerchantItems)) to usable [Object].
+ * Convert Array(Maybe(Object(Merchant)) to usable Array(Object(Merchant)).
  * 
- * @param {Array(Maybe(Object(MerchantItems))} mis
- *   The array of maybe LineItems.
+ * @param {Array(Maybe(Object(Merchant))} m
+ *   The array of maybe merchants.
  * @param addr 
- *   The address to be used for any fake addresses.
- * @returns 
- *   Array of usable "isReal" LineItems
+ *   The address to be used for the fakes.
+ * @returns {Array(Object(Merchant)}
+ *   Array of usable merchants.
  */
-const cleanMerchantItems = (mis, addr) => {
-  return mis.map((x) => { 
+const cleanMerchants = (m, addr) => {
+  return m.map((x) => { 
     return fromMaybe(x,
-      (() => createFakeMerchantItems(addr)), 
+      (() => createFakeMerchants(addr)), 
       ((y) => createIsReal(true, y))
     ); 
   })
@@ -249,10 +246,10 @@ const cleanMerchantItems = (mis, addr) => {
  *   The cleaned OrderData. 
  */
 const cleanOrderData = (orderData, fakesAddr) => {
-  const merchantItemsClean = cleanMerchantItems(orderData.merchantItems, fakesAddr);
+  const merchantItemsClean = cleanMerchants(orderData.merchantItems, fakesAddr);
   const merchantItemsFinal = merchantItemsClean.map(x => {
     
-    // Cleaning LineItems for single MerchantItem 
+    // Cleaning LineItems for single Merchant 
     const lineItemsClean = cleanLineItems(x.lineItems, fakesAddr);
     const lineItemsFinal = lineItemsClean.map(y => {
       
@@ -261,7 +258,7 @@ const cleanOrderData = (orderData, fakesAddr) => {
 
       return {
         isReal: y.isReal,
-        totalCost: y.totalCost, // The unit price * qty
+        totalCost: y.totalCost,
         shipping: y.shipping,
         tax: y.tax,
         beneficiaries: beneficiariesClean
@@ -363,21 +360,21 @@ const validateCleanOrder = (orderData) => {
  * Errors to present to the buyer on validation or other failure.
  */
  const errors = {
-  errorInvalidOrderTotal: Fun([], Null),
-  errorAmountsExceedBalance: Fun([], Null),
-  errorInvalidRecipientAmounts: Fun([], Null),
-  errorGenericInvalidAmounts: Fun([], Null),
+  // errorInvalidOrderTotal: Fun([], Null),
+  // errorAmountsExceedBalance: Fun([], Null),
+  // errorInvalidRecipientAmounts: Fun([], Null),
+  errorGenericInvalidOrder: Fun([], Null),
 }
  
 /**
  * The Buyer Interface.
  */
 const BuyerInterface = {  
-  orderData: Object(OrderData),
-  ...errors
+  getOrderData: Fun([], Object(OrderData)),
+  // alertPaidRecipient: Fun([Address, UInt, Bytes], Null),
+  ...errors,
 };
-
-
+ 
 // ========================================================
 // Main Contract Logic
 // ========================================================
@@ -396,12 +393,12 @@ export const main = Reach.App(
         .while(keepGoing)
         .case(Buyer,
           (() => {
-            const orderData = declassify(interact.orderData);
+            const orderData = declassify(interact.getOrderData());
             const orderDataClean = cleanOrderData(orderData, Bakesale);
             const validationResult = validateCleanOrder(orderDataClean);
 
             if(!validationResult.orderIsValid) {
-              interact.errorGenericInvalidAmounts();
+              interact.errorGenericInvalidOrder();
             } 
             return {
               when: validationResult.orderIsValid
@@ -410,7 +407,7 @@ export const main = Reach.App(
           ((_) => {
             commit();
             Buyer.only(() => {
-              const orderData = declassify(interact.orderData);
+              const orderData = declassify(interact.getOrderData());
             });
             Buyer.publish(orderData); 
             const orderDataClean = cleanOrderData(orderData, Bakesale);
@@ -419,14 +416,14 @@ export const main = Reach.App(
             // This should never happen since we validate in the 
             // local step above, but just in case.
             if(!validationResult.orderIsValid) { 
-              Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
+              Buyer.only(() => declassify(interact.errorGenericInvalidOrder()));
               return true;
             } else {
               commit();
               Buyer.publish().pay(orderTotal);
 
               // Keep this all simple for MVP testing.
-              // We can make the transfers more efficients
+              // We can make the transfers more efficient
               // and aggregated after we know it works.
               orderDataClean.merchantItems.forEach(mi => {
                 // Looking at a single merchant.
@@ -437,8 +434,10 @@ export const main = Reach.App(
                       const serviceFee = li.totalCost * BAKESALE_FEE_MULTIPLE;
                       const totalMinusFee = li.totalCost - serviceFee;
 
-                      // @todo This needs to be split up so tax goes to a tax acct.
                       transfer(serviceFee).to(Bakesale);
+                      // Buyer.interact(declassify(interact.alertPaidRecipient(Bakesale, serviceFee, 'service fee')))
+
+                      /** @todo This needs to go to a tax acct. */
                       transfer(li.tax).to(Bakesale)
 
                       const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
@@ -462,13 +461,15 @@ export const main = Reach.App(
                 }
               });
 
+              assert(balace() == 0)
+
               return true;
             } 
 
           })
         )
         // Sufficiently long timeout that it will never be
-        // since the contract needs to be persistent.
+        // executed since the contract needs to be persistent.
         .timeout(100^100, () => {
           Anybody.publish();
           return true;
