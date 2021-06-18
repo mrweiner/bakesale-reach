@@ -131,9 +131,9 @@ const createFakeLineItem = (addr) => {
   const beneficiaries = Array.iota(MAX_BENEFICIARIES_PER_ITEM).map((_) => createFakeBeneficiary(addr));
 
   return createIsReal(false, {
-    totalCost: UInt, // The unit price * qty
-    shipping: UInt,
-    tax: UInt,
+    totalCost: 0,
+    shipping: 0,
+    tax: 0,
     beneficiaries
   });
 }
