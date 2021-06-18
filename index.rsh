@@ -58,14 +58,14 @@
 const BAKESALE_FEE_PERCENT = 5; 
 const BAKESALE_FEE_MULTIPLE = BAKESALE_FEE_PERCENT / 100;
 
-const MAX_BENEFICIARIES_PER_ITEM = 5;
-const MAX_LINE_ITEMS_PER_MERCHANT = 5;
-const MAX_TOTAL_MERCHANTS = 5
+const MAX_BENEFICIARIES_PER_ITEM = 1;
+const MAX_LINE_ITEMS_PER_MERCHANT = 1;
+const MAX_TOTAL_MERCHANTS = 1
 
-// Merchant totals are equivalent but used in different contexts.
-const TOTAL_MERCHANTS = MAX_TOTAL_MERCHANTS;
-const TOTAL_LINE_ITEMS = MAX_LINE_ITEMS_PER_MERCHANT * TOTAL_MERCHANTS;
-const TOTAL_BENEFICIARIES = MAX_BENEFICIARIES_PER_ITEM * TOTAL_LINE_ITEMS;
+// // Merchant totals are equivalent but used in different contexts.
+// const TOTAL_MERCHANTS = MAX_TOTAL_MERCHANTS;
+// const TOTAL_LINE_ITEMS = MAX_LINE_ITEMS_PER_MERCHANT * TOTAL_MERCHANTS;
+// const TOTAL_BENEFICIARIES = MAX_BENEFICIARIES_PER_ITEM * TOTAL_LINE_ITEMS;
 
 // ========================================================
 // Primary Objects & Their Fakers
@@ -128,12 +128,14 @@ const LineItem = {
  *   The fake LineItem.
  */
 const createFakeLineItem = (addr) => {
+  const beneficiaries = Array.iota(MAX_BENEFICIARIES_PER_ITEM).map((_) => createFakeBeneficiary(addr));
+
   return createIsReal(false, {
     totalCost: UInt, // The unit price * qty
     shipping: UInt,
     tax: UInt,
-    beneficiaries: Array.iota(MAX_BENEFICIARIES_PER_ITEM).map((_) => createFakeBeneficiary(addr))}
-  );
+    beneficiaries
+  });
 }
 
 /**
@@ -153,10 +155,13 @@ const MerchantItem = {
  *   The fake MerchantItems obj.
  */
  const createFakeMerchantItems = (addr) => {
-  return createIsReal(false, {
-    addr: Address,
-    lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map((_) => createFakeLineItem(addr))}
-  ); 
+  assert(addr !== null)
+ 
+  return createIsReal(false, { 
+    addr,
+    lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map(_ => createFakeLineItem(addr))
+    // lineItems: []
+  }); 
  } 
 
 /**
@@ -169,7 +174,7 @@ const OrderData = {
 
 
 // ========================================================
-// Repair Functions
+// Clean Functions
 // ========================================================
 
 /**
@@ -177,15 +182,15 @@ const OrderData = {
  * 
  * @param {Array(Maybe(Object(Beneficiary))} beneficiaries
  *   The array of maybe beneficiaries.
- * @param buyer 
+ * @param addr 
  *   The address to be used for the fakes.
  * @returns 
  *   Array of usable "isReal" beneficiaries
  */
- const repairBeneficiaries = (beneficiaries, buyer) => {
+ const cleanBeneficiaries = (beneficiaries, addr) => {
   return beneficiaries.map((x) => {
     return fromMaybe(x,
-      (() => createFakeBeneficiary(buyer)), 
+      (() => createFakeBeneficiary(addr)), 
       ((y) => createIsReal(true, y))
     ); 
   })
@@ -196,15 +201,15 @@ const OrderData = {
  * 
  * @param {Array(Maybe(Object(LineItem))} lis
  *   The array of maybe LineItems.
- * @param buyer 
+ * @param addr 
  *   The address to be used for any fake addresses.
  * @returns 
  *   Array of usable "isReal" LineItems
  */
-const repairLineItems = (lis, buyer) => {
+const cleanLineItems = (lis, addr) => {
   return lis.map((x) => {
     return fromMaybe(x,
-      (() => createFakeLineItem(buyer)), 
+      (() => createFakeLineItem(addr)), 
       ((y) => createIsReal(true, y))
     ); 
   })
@@ -215,47 +220,47 @@ const repairLineItems = (lis, buyer) => {
  * 
  * @param {Array(Maybe(Object(MerchantItems))} mis
  *   The array of maybe LineItems.
- * @param buyer 
+ * @param addr 
  *   The address to be used for any fake addresses.
  * @returns 
  *   Array of usable "isReal" LineItems
  */
-const repairMerchantItems = (mis, buyer) => {
-  return mis.map((x) => {
+const cleanMerchantItems = (mis, addr) => {
+  return mis.map((x) => { 
     return fromMaybe(x,
-      (() => createFakeMerchantItems(buyer)), 
+      (() => createFakeMerchantItems(addr)), 
       ((y) => createIsReal(true, y))
     ); 
   })
 }
 
 /**
- * Repair the entire orderData's tree.
+ * Clean the entire orderData's tree.
  * 
  * @param {OrderData} orderData
- *   The order data to be repaired. 
- * @param {Address} buyer 
- *   The order's buyer.
+ *   The order data to be cleaned. 
+ * @param {Address} fakesAddr 
+ *   The address to be used for fakes.
  * 
- * @returns {OrderData}
- *   The repaired OrderData. 
+ * @returns {OrderData} 
+ *   The cleaned OrderData. 
  */
-const repairOrderData = (orderData, buyer) => {
-  const merchantItemsRepaired = repairMerchantItems(orderData.merchantItems, buyer);
-  const merchantItemsFinal = merchantItemsRepaired.reduce([], (mi, x) => {
+const cleanOrderData = (orderData, fakesAddr) => {
+  const merchantItemsClean = cleanMerchantItems(orderData.merchantItems, fakesAddr);
+  const merchantItemsFinal = merchantItemsClean.reduce([], (mi, x) => {
     
-    // Repairing LineItems for single MerchantItem
-    const lineItemsRepaired = repairLineItems(mi.lineItems, buyer);
-    const lineItemsFinal = x.lineItems.reduce([], (liRaw, y) => {
+    // Cleaning LineItems for single MerchantItem 
+    const lineItemsClean = cleanLineItems(x.lineItems, fakesAddr);
+    const lineItemsFinal = lineItemsClean.reduce([], (li, y) => {
       
-      // Repairing Benficiaries for a single LineItem
-      const beneficiariesRepaired = repairBeneficiaries(liRaw.beneficiaries, buyer);
+      // Cleaning Benficiaries for a single LineItem
+      const beneficiariesClean = cleanBeneficiaries(li.beneficiaries, fakesAddr);
 
       return {
         totalCost: y.totalCost, // The unit price * qty
         shipping: y.shipping,
         tax: y.tax,
-        beneficiaries: beneficiariesRepaired
+        beneficiaries: beneficiariesClean
       }
     });
      
@@ -282,10 +287,10 @@ const repairOrderData = (orderData, buyer) => {
  * @todo Check that no merchants appear more than once.
  * 
  * @param {OrderData} orderData
- *   The REPAIRED order data. The logic assumes that all
+ *   The CLEANED order data. The logic assumes that all
  *   objects are operable, i.e. no Maybes.
  */
-const validateRepairedOrder = (orderData) => {
+const validateCleanOrder = (orderData) => {
   const positiveOrderTotal = orderData.orderTotal > 0;
   const orderTotalCalcd = orderData.merchantItems.reduce(0, (oTotal, x) => {
     const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => mTotal + y.totalCost);
@@ -299,9 +304,9 @@ const validateRepairedOrder = (orderData) => {
   const allAmtsNonNegative = orderData.merchantItems.reduce(true, (allAmtsPos, x) => {
     const itemsPositive = x.lineItems.reduce(true, (ip, y) => {
       const totalCostValid = y.isReal ? y.totalCost > 0 : y.totalCost == 0
-      return !ip ? false : totalCostValid 
-        && y.shipping >= 0
-        && y.tax >= 0
+      const shippingValid = y.isReal ? y.shipping >= 0 : y.shipping == 0
+      const taxValid = y.isReal ? y.tax >= 0 : y.tax == 0
+      return !ip ? false : totalCostValid && shippingValid && taxValid
     });
 
     return !allAmtsPos ? false : itemsPositive;
@@ -387,8 +392,8 @@ export const main = Reach.App(
         .case(Buyer,
           (() => {
             const orderData = declassify(interact.orderData);
-            const orderDataRepaired = repairOrderData(orderData, this);
-            const validationResult = validateRepairedOrder(orderDataRepaired);
+            const orderDataClean = cleanOrderData(orderData, Buyer);
+            const validationResult = validateCleanOrder(orderDataClean);
 
             if(!validationResult.shouldPayRecipients) {
               interact.errorGenericInvalidAmounts();
@@ -402,9 +407,9 @@ export const main = Reach.App(
             Buyer.only(() => {
               const orderData = declassify(interact.orderData);
             });
-            Buyer.publish(orderData);
-            const orderDataRepaired = repairOrderData(orderData, Buyer);
-            const validationResult = validateRepairedOrder(orderDataRepaired);
+            Buyer.publish(orderData); 
+            const orderDataClean = cleanOrderData(orderData, Buyer);
+            const validationResult = validateCleanOrder(orderDataClean);
 
             // This should never happen since we validate in the 
             // local step above, but just in case.
@@ -418,7 +423,7 @@ export const main = Reach.App(
               // Keep this all simple for MVP testing.
               // We can make the transfers more efficients
               // and aggregated after we know it works.
-              orderDataRepaired.merchantItems.forEach(mi => {
+              orderDataClean.merchantItems.forEach(mi => {
                 // Looking at a single merchant.
                 if(mi.isReal) {
                   mi.lineItems.forEach(li => {
