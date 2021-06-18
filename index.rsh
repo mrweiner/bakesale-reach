@@ -125,13 +125,12 @@ const LineItem = {
  *   The fake LineItem.
  */
 const createFakeLineItem = (addr) => {
-  const beneficiaries = Array.iota(MAX_BENEFICIARIES_PER_ITEM).map((_) =>  Maybe(Object(Beneficiary)).Some(createFakeBeneficiary(addr)));
-
   return createIsReal(false, {
     totalCost: 0,
     shipping: 0,
     tax: 0,
-    beneficiaries
+    beneficiaries: Array.iota(MAX_BENEFICIARIES_PER_ITEM).map(_ =>  
+      Maybe(Object(Beneficiary)).Some(createFakeBeneficiary(addr)))
   });
 }
 
@@ -152,13 +151,11 @@ const Merchant = {
  * @returns 
  *   The fake Merchants obj.
  */
- const createFakeMerchants = (addr) => {
-  assert(addr !== null)
- 
+ const createFakeMerchants = (addr) => { 
   return createIsReal(false, { 
     addr,
-    lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map(_ => Maybe(Object(LineItem)).Some(createFakeLineItem(addr)))
-    // lineItems: []
+    lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map(_ => 
+      Maybe(Object(LineItem)).Some(createFakeLineItem(addr)))
   }); 
  } 
 
