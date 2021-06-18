@@ -58,9 +58,9 @@
 const BAKESALE_FEE_PERCENT = 5; 
 const BAKESALE_FEE_MULTIPLE = BAKESALE_FEE_PERCENT / 100;
 
-const MAX_BENEFICIARIES_PER_ITEM = 1;
-const MAX_LINE_ITEMS_PER_MERCHANT = 1;
-const MAX_TOTAL_MERCHANTS = 1
+const MAX_BENEFICIARIES_PER_ITEM = 5;
+const MAX_LINE_ITEMS_PER_MERCHANT = 10;
+const MAX_TOTAL_MERCHANTS = 5
 
 // // Merchant totals are equivalent but used in different contexts.
 // const TOTAL_MERCHANTS = MAX_TOTAL_MERCHANTS;
@@ -90,6 +90,7 @@ const MAX_TOTAL_MERCHANTS = 1
  * The beneficiary of a particular item.
  */
 const Beneficiary = {
+  isReal: Bool,
   addr: Address,
   percentToReceive: UInt,
 };
@@ -113,6 +114,7 @@ const createFakeBeneficiary = (addr) => {
  * An order line item.
  */
 const LineItem = {
+  isReal: Bool,
   totalCost: UInt, // The unit price * qty
   shipping: UInt,
   tax: UInt,
@@ -128,7 +130,7 @@ const LineItem = {
  *   The fake LineItem.
  */
 const createFakeLineItem = (addr) => {
-  const beneficiaries = Array.iota(MAX_BENEFICIARIES_PER_ITEM).map((_) => createFakeBeneficiary(addr));
+  const beneficiaries = Array.iota(MAX_BENEFICIARIES_PER_ITEM).map((_) =>  Maybe(Object(Beneficiary)).Some(createFakeBeneficiary(addr)));
 
   return createIsReal(false, {
     totalCost: 0,
@@ -142,6 +144,7 @@ const createFakeLineItem = (addr) => {
  * Array of order line items for a particular merchant.
  */
 const MerchantItem = {
+  isReal: Bool,
   addr: Address,
   lineItems: Array(Maybe(Object(LineItem)), MAX_LINE_ITEMS_PER_MERCHANT) 
 }
@@ -159,7 +162,7 @@ const MerchantItem = {
  
   return createIsReal(false, { 
     addr,
-    lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map(_ => createFakeLineItem(addr))
+    lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map(_ => Maybe(Object(LineItem)).Some(createFakeLineItem(addr)))
     // lineItems: []
   }); 
  } 
@@ -247,16 +250,17 @@ const cleanMerchantItems = (mis, addr) => {
  */
 const cleanOrderData = (orderData, fakesAddr) => {
   const merchantItemsClean = cleanMerchantItems(orderData.merchantItems, fakesAddr);
-  const merchantItemsFinal = merchantItemsClean.reduce([], (mi, x) => {
+  const merchantItemsFinal = merchantItemsClean.map(x => {
     
     // Cleaning LineItems for single MerchantItem 
     const lineItemsClean = cleanLineItems(x.lineItems, fakesAddr);
-    const lineItemsFinal = lineItemsClean.reduce([], (li, y) => {
+    const lineItemsFinal = lineItemsClean.map(y => {
       
-      // Cleaning Benficiaries for a single LineItem
-      const beneficiariesClean = cleanBeneficiaries(li.beneficiaries, fakesAddr);
+      // Cleaning Benficiaries for a single LineItem 
+      const beneficiariesClean = cleanBeneficiaries(y.beneficiaries, fakesAddr);
 
       return {
+        isReal: y.isReal,
         totalCost: y.totalCost, // The unit price * qty
         shipping: y.shipping,
         tax: y.tax,
@@ -264,11 +268,12 @@ const cleanOrderData = (orderData, fakesAddr) => {
       }
     });
      
-    return {
-      addr: miRaw.addr,
+    return { 
+      isReal: x.isReal,
+      addr: x.addr,
       lineItems: lineItemsFinal
     }
-  });
+  }); 
 
   return {
     orderTotal: orderData.orderTotal,
@@ -392,14 +397,14 @@ export const main = Reach.App(
         .case(Buyer,
           (() => {
             const orderData = declassify(interact.orderData);
-            const orderDataClean = cleanOrderData(orderData, Buyer);
+            const orderDataClean = cleanOrderData(orderData, Bakesale);
             const validationResult = validateCleanOrder(orderDataClean);
 
-            if(!validationResult.shouldPayRecipients) {
+            if(!validationResult.orderIsValid) {
               interact.errorGenericInvalidAmounts();
             } 
             return {
-              when: validationResult.shouldPayRecipients
+              when: validationResult.orderIsValid
             }
           }), 
           ((_) => {
@@ -408,12 +413,12 @@ export const main = Reach.App(
               const orderData = declassify(interact.orderData);
             });
             Buyer.publish(orderData); 
-            const orderDataClean = cleanOrderData(orderData, Buyer);
+            const orderDataClean = cleanOrderData(orderData, Bakesale);
             const validationResult = validateCleanOrder(orderDataClean);
 
             // This should never happen since we validate in the 
             // local step above, but just in case.
-            if(!validationResult.shouldPayRecipients) {
+            if(!validationResult.orderIsValid) { 
               Buyer.only(() => declassify(interact.errorGenericInvalidAmounts()));
               return true;
             } else {
