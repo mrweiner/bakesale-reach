@@ -170,7 +170,7 @@ const cleanMaybeArr = (arr, addr, callbackCreateFaker) => {
   return arr.map((x) => {
     return fromMaybe(x,  
       (() => callbackCreateFaker(addr)), 
-      ((y) => ({isReal: false, ...y}))
+      ((y) => ({isReal: true, ...y}))
     );  
   })
 }
