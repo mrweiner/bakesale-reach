@@ -146,7 +146,7 @@ const createFakeMerchant = (addr) => ({
  */
 const OrderData = {
   orderTotal: UInt,
-  merchantItems: Array(Maybe(Object(Merchant)), MAX_TOTAL_MERCHANTS),
+  merchants: Array(Maybe(Object(Merchant)), MAX_TOTAL_MERCHANTS),
 }
 
 
@@ -223,8 +223,8 @@ const cleanMerchants = (m, addr) => cleanMaybeArr(m, addr, createFakeMerchant);
  *   The cleaned OrderData. 
  */
 const cleanOrderData = (orderData, fakesAddr) => {
-  const merchantItemsClean = cleanMerchants(orderData.merchantItems, fakesAddr);
-  const merchantItemsFinal = merchantItemsClean.map(x => {
+  const merchantsClean = cleanMerchants(orderData.merchants, fakesAddr);
+  const merchantsFinal = merchantsClean.map(x => {
     
     // Cleaning LineItems for single Merchant 
     const lineItemsClean = cleanLineItems(x.lineItems, fakesAddr);
@@ -235,7 +235,7 @@ const cleanOrderData = (orderData, fakesAddr) => {
 
       return {
         isReal: y.isReal,
-        totalCost: y.totalCost,
+        totalCost: y.totalCost, 
         shipping: y.shipping,
         tax: y.tax,
         beneficiaries: beneficiariesClean
@@ -251,7 +251,7 @@ const cleanOrderData = (orderData, fakesAddr) => {
 
   return {
     orderTotal: orderData.orderTotal,
-    merchantItems: merchantItemsFinal 
+    merchants: merchantsFinal 
   }
 }
 
@@ -271,7 +271,7 @@ const cleanOrderData = (orderData, fakesAddr) => {
  */
 const validateCleanOrder = (orderData) => {
   const positiveOrderTotal = orderData.orderTotal > 0;
-  const orderTotalCalcd = orderData.merchantItems.reduce(0, (oTotal, x) => {
+  const orderTotalCalcd = orderData.merchants.reduce(0, (oTotal, x) => {
     const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => mTotal + y.totalCost);
     return oTotal + merchantTotal;
   });
@@ -280,7 +280,7 @@ const validateCleanOrder = (orderData) => {
   const orderTotalsMatch = positiveOrderTotal == orderTotalCalcd;
 
   // All amounts on the order must be >= 0.
-  const allAmtsNonNegative = orderData.merchantItems.reduce(true, (allAmtsPos, x) => {
+  const allAmtsNonNegative = orderData.merchants.reduce(true, (allAmtsPos, x) => {
     const itemsPositive = x.lineItems.reduce(true, (ip, y) => {
       const totalCostValid = y.isReal ? y.totalCost > 0 : y.totalCost == 0
       const shippingValid = y.isReal ? y.shipping >= 0 : y.shipping == 0
@@ -292,7 +292,7 @@ const validateCleanOrder = (orderData) => {
   });
 
   // Any individual item's beneficiary percentages need to be <= 100.
-  const beneficiaryPctsValid = orderData.merchantItems.reduce(true, (pctsValid, x) => {
+  const beneficiaryPctsValid = orderData.merchants.reduce(true, (pctsValid, x) => {
     const itemPctsValid = x.lineItems.reduce(true, (itemPctValid, y) => {
       const beneficiariesPct = y.beneficiaries.reduce(0, (pctTotal, z) => {
         return pctTotal + z.percentToReceive;
@@ -306,7 +306,7 @@ const validateCleanOrder = (orderData) => {
 
   // Any individual items' tax + shipping must be less than the order item's totalCost.
   // If they exceed it then that means the total does not account for one of them.
-  const taxShippingValid = orderData.merchantItems.reduce(true, (tsValid, x) => {
+  const taxShippingValid = orderData.merchants.reduce(true, (tsValid, x) => {
     const itemTsValid = x.lineItems.reduce(true, (itemTsValid, y) => {      
       return y.totalCost > y.tax + y.shipping;
     });
@@ -402,8 +402,8 @@ export const main = Reach.App(
               // Keep this all simple for MVP testing.
               // We can make the transfers more efficient
               // and aggregated after we know it works.
-              orderDataClean.merchantItems.forEach(mi => {
-                // Looking at a single merchant.
+              orderDataClean.merchants.forEach(mi => {
+                // Looking at a single merchant. 
                 if(mi.isReal) {
                   mi.lineItems.forEach(li => {
                     // Looking at a single line item.
