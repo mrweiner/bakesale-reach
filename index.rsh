@@ -67,21 +67,6 @@ const MAX_TOTAL_MERCHANTS = 1;
 // ========================================================
 
 /**
- * Create an "isReal" version of an object.
- * 
- * @param {object} x
- *   The object to clarify as real. 
- * @param {bool} state
- *   Whether or not the object is real.
- * @returns {object}
- *   The initial object with an isReal prop added.
- */
-const createIsReal = (state, x) => ({
-  isReal: state,
-  ...x
-});
-
-/**
  * The beneficiary of a particular item.
  */
 const Beneficiary = {
@@ -93,17 +78,16 @@ const Beneficiary = {
 /**
  * Create a fake benficiary.
  * 
- * @param addr
+ * @param {Address} addr 
  *   The fake address. 
- * @returns 
+ * @returns {Beneficiary}
  *   The fake Beneficiary.
  */
-const createFakeBeneficiary = (addr) => {
-  return createIsReal(false, {
-    addr,
-    percentToReceive: 0}
-  );
-}
+const createFakeBeneficiary = (addr) => ({
+  isReal: false,
+  addr,
+  percentToReceive: 0
+})
 
 /**
  * An order line item.
@@ -119,20 +103,19 @@ const LineItem = {
 /**
  * Create a fake LineItem.
  * 
- * @param addr
+ * @param {Address} addr 
  *   The fake address.
- * @returns 
+ * @returns {LineItem}
  *   The fake LineItem.
  */
-const createFakeLineItem = (addr) => {
-  return createIsReal(false, {
-    totalCost: 0,
-    shipping: 0,
-    tax: 0,
-    beneficiaries: Array.iota(MAX_BENEFICIARIES_PER_ITEM).map(_ =>  
-      Maybe(Object(Beneficiary)).Some(createFakeBeneficiary(addr)))
-  });
-}
+const createFakeLineItem = (addr) => ({
+  isReal: false,
+  totalCost: 0,
+  shipping: 0,
+  tax: 0,
+  beneficiaries: Array.iota(MAX_BENEFICIARIES_PER_ITEM).map(_ =>  
+    Maybe(Object(Beneficiary)).Some(createFakeBeneficiary(addr)))
+})
 
 /**
  * Array of order line items for a particular merchant.
@@ -144,20 +127,19 @@ const Merchant = {
 }
 
 /**
- * Create a fake Merchants.
+ * Create a fake Merchant.
  * 
- * @param addr
+ * @param {Address} addr 
  *   The fake address. 
- * @returns 
+ * @returns {Merchant}
  *   The fake Merchants obj.
  */
- const createFakeMerchants = (addr) => { 
-  return createIsReal(false, { 
-    addr,
-    lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map(_ => 
-      Maybe(Object(LineItem)).Some(createFakeLineItem(addr)))
-  }); 
- } 
+const createFakeMerchant = (addr) => ({ 
+  isReal: false,
+  addr,
+  lineItems: Array.iota(MAX_LINE_ITEMS_PER_MERCHANT).map(_ => 
+    Maybe(Object(LineItem)).Some(createFakeLineItem(addr)))
+});
 
 /**
  * The order data for which payment is processed.
@@ -186,9 +168,9 @@ const OrderData = {
  */
 const cleanMaybeArr = (arr, addr, callbackCreateFaker) => {
   return arr.map((x) => {
-    return fromMaybe(x, 
+    return fromMaybe(x,  
       (() => callbackCreateFaker(addr)), 
-      ((y) => createIsReal(true, y))
+      ((y) => ({isReal: false, ...y}))
     );  
   })
 }
@@ -227,7 +209,7 @@ const cleanLineItems = (lis, addr) => cleanMaybeArr(lis, addr, createFakeLineIte
  * @returns {Array(Object(Merchant)} 
  *   Array of usable merchants.
  */
-const cleanMerchants = (m, addr) => cleanMaybeArr(m, addr, createFakeMerchants);
+const cleanMerchants = (m, addr) => cleanMaybeArr(m, addr, createFakeMerchant);
 
 /**
  * Clean the entire orderData's tree.
