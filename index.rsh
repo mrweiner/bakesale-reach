@@ -283,7 +283,8 @@ const getOrderTotal = (orderData) => {
 /**
  * Check whether or not the order is valid to be processed.
  * 
- * @todo Check that no merchants appear more than once.
+ * @todo Check that no merchants appear more than once
+ *   since this might be an indication of double-charging.
  * 
  * @param {OrderData} orderData
  *   The CLEANED order data. The logic assumes that all
