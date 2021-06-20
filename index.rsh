@@ -327,6 +327,7 @@ const validateCleanOrder = (orderData) => {
 
   return {
     orderIsValid,
+    positiveOrderTotal,
     allAmtsNonNegative,
     beneficiaryPctsValid,
   }
