@@ -56,7 +56,7 @@
 
 // Since reach cannot really handle floating point numbers.
 const BAKESALE_FEE_PERCENT = 5; 
-const BAKESALE_FEE_MULTIPLE = BAKESALE_FEE_PERCENT / 100;
+const BAKESALE_FEE_AS_DECIMAL = BAKESALE_FEE_PERCENT / 100;
 
 const MAX_BENEFICIARIES_PER_ITEM = 1;
 const MAX_LINE_ITEMS_PER_MERCHANT = 1;
@@ -418,7 +418,7 @@ export const main = Reach.App(
                       const liUnitsCost = li.unitPrice * li.qty;
                       const thisLiTotal = liUnitsCost + li.tax + li.shipping;
 
-                      const serviceFee = liUnitsCost * BAKESALE_FEE_MULTIPLE;
+                      const serviceFee = liUnitsCost * BAKESALE_FEE_AS_DECIMAL;
                       assert(serviceFee < liUnitsCost);
 
                       const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
