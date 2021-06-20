@@ -54,13 +54,13 @@
 // Constants
 // ========================================================
 
-// Since reach cannot really handle floating point numbers.
 const BAKESALE_FEE_PERCENT = 5; 
 const BAKESALE_FEE_AS_DECIMAL = BAKESALE_FEE_PERCENT / 100;
 
 const MAX_BENEFICIARIES_PER_ITEM = 1;
 const MAX_LINE_ITEMS_PER_MERCHANT = 1;
 const MAX_TOTAL_MERCHANTS = 1;
+
 
 // ========================================================
 // Primary Objects & Their Fakers
@@ -358,6 +358,7 @@ const BuyerInterface = {
   ...errors,
 };
  
+
 // ========================================================
 // Main Contract Logic
 // ========================================================
