@@ -407,14 +407,23 @@ export const main = Reach.App(
               commit();
               Buyer.publish().pay(orderTotal);
 
+              // ========================================================
+              // Payout all parties.
+              // ========================================================
               // Keep this all simple for MVP testing.
               // We can make the transfers more efficient
-              // and aggregated after we know it works.
+              // and aggregated after we know it works. 
               orderDataClean.merchants.forEach(merchant => {
+
+                // ========================================================
                 // Looking at a single merchant. 
+                // ========================================================
                 if(merchant.isReal) {
                   merchant.lineItems.forEach(li => {
+
+                    // ========================================================
                     // Looking at a single line item.
+                    // ========================================================
                     if(li.isReal) {
                       const liUnitsCost = li.unitPrice * li.qty;
                       const thisLiTotal = liUnitsCost + li.tax + li.shipping;
@@ -422,16 +431,16 @@ export const main = Reach.App(
                       const serviceFee = liUnitsCost * BAKESALE_FEE_AS_DECIMAL;
                       assert(serviceFee < liUnitsCost);
 
+                      // The amount that qualifies for merchant/benficiary payout,
+                      const feedLiUnitsCost = liUnitsCost - serviceFee;
+
+
+                      // ========================================================
+                      // Set up payments for final assertion and transfer.
+                      // ========================================================
                       const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
                         return pct + x.percentToReceive;
                       });  
-
-                      // Set up all payment calculations for final assertions and transfer.
-                      //
-                      // The amount that qualifies for merchant/benficiary payout,
-                      // i.e. the unitPrice * qty - service fee.
-                      const feedLiUnitsCost = liUnitsCost - serviceFee;
-
                       const pctToBeneficiariesAsDecimal = pctToBeneficiaries / 100;
                       const amtToBeneficiaries = feedLiUnitsCost * pctToBeneficiariesAsDecimal;
 
@@ -441,6 +450,10 @@ export const main = Reach.App(
 
                       const amtBeingPaidOnLi = serviceFee + amtToMerchant + amtToBeneficiaries + li.tax;
 
+
+                      // ========================================================
+                      // Execute all transfers
+                      // ========================================================
                       assert(amtToBeneficiaries + amtToMerchant == feedLiUnitsCost + li.shipping);
                       assert(amtBeingPaidOnLi == thisLiTotal);
 
