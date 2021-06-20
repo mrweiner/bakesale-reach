@@ -213,7 +213,7 @@ const cleanLineItems = (lis, addr) => cleanMaybeArr(lis, addr, createFakeLineIte
 const cleanMerchants = (m, addr) => cleanMaybeArr(m, addr, createFakeMerchant);
 
 /**
- * Clean the entire orderData's tree.
+ * Clean the entire orderData's tree of Maybes.
  * 
  * @param {OrderData} orderData
  *   The order data to be cleaned. 
@@ -474,7 +474,6 @@ export const main = Reach.App(
 
               return true;
             } 
-
           })
         )
         // Sufficiently long timeout that it will never be
