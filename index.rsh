@@ -274,10 +274,10 @@ const validateCleanOrder = (orderData) => {
   const orderTotalCalcd = orderData.merchants.reduce(0, (oTotal, x) => {
     const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => mTotal + y.totalCost);
     return oTotal + merchantTotal;
-  });
+  }); 
 
   // Ensure that the provided order total matches the order contents.
-  const orderTotalsMatch = positiveOrderTotal == orderTotalCalcd;
+  const orderTotalsMatch = orderData.orderTotal == orderTotalCalcd;
 
   // All amounts on the order must be >= 0.
   const allAmtsNonNegative = orderData.merchants.reduce(true, (allAmtsPos, x) => {
@@ -304,7 +304,7 @@ const validateCleanOrder = (orderData) => {
     return !pctsValid ? false : itemPctsValid;
   });
 
-  // Any individual items' tax + shipping must be less than the order item's totalCost.
+  // Any individual itemls tax + shipping must be less than the order item's totalCost.
   // If they exceed it then that means the total does not account for one of them.
   const taxShippingValid = orderData.merchants.reduce(true, (tsValid, x) => {
     const itemTsValid = x.lineItems.reduce(true, (itemTsValid, y) => {      
@@ -314,7 +314,8 @@ const validateCleanOrder = (orderData) => {
     return !tsValid ? false : itemTsValid;
   });
 
-  const orderIsValid = orderTotalsMatch 
+  const orderIsValid = positiveOrderTotal 
+    && orderTotalsMatch 
     && allAmtsNonNegative
     && beneficiaryPctsValid
     && taxShippingValid;
@@ -344,7 +345,7 @@ const validateCleanOrder = (orderData) => {
 }
  
 /**
- * The Buyer Interface.
+ * The Buyer Participant Interface.
  */
 const BuyerInterface = {  
   getOrderData: Fun([], Object(OrderData)),
@@ -397,7 +398,7 @@ export const main = Reach.App(
               return true;
             } else {
               commit();
-              Buyer.publish().pay(orderTotal);
+              Buyer.publish().pay(orderData.orderTotal);
 
               // Keep this all simple for MVP testing.
               // We can make the transfers more efficient
@@ -419,18 +420,18 @@ export const main = Reach.App(
 
                       const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
                         return pct + x.percentToReceive;
-                      });
+                      }); 
 
                       // Pay out the merchant.
                       const pctToMerchant = (100 - pctToBeneficiaries) / 100;
-                      const amtToMerchant = pctToMerchant * totalMinusFee;
+                      const amtToMerchant = pctToMerchant * totalMinusFee + li.shipping;
                       transfer(amtToMerchant).to(mi.addr);
 
                       // Pay out the beneficiaries
                       li.beneficiaries.forEach(ben => {
                         if(ben.isReal) {
                           const amtToBen = totalMinusFee * ben.percentToReceive;
-                          transfer(amtToBen).to(ben);
+                          transfer(amtToBen).to(ben.addr);
                         }
                       })
                     }
@@ -438,7 +439,7 @@ export const main = Reach.App(
                 }
               });
 
-              assert(balace() == 0)
+              assert(balance() == 0)
 
               return true;
             } 
