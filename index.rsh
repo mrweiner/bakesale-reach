@@ -445,14 +445,12 @@ export const main = Reach.App(
                       const amtToMerchant = feedLiMinusBensPct + li.shipping;
 
                       const amtBeingPaidOnLi = serviceFee + amtToMerchant + amtToBeneficiaries + li.tax;
-
+                      assert(amtToBeneficiaries + amtToMerchant == feedLiUnitsCost + li.shipping);
+                      assert(amtBeingPaidOnLi == thisLiTotal);
 
                       // ========================================================
                       // Execute all transfers
                       // ========================================================
-                      assert(amtToBeneficiaries + amtToMerchant == feedLiUnitsCost + li.shipping);
-                      assert(amtBeingPaidOnLi == thisLiTotal);
-
                       transfer(serviceFee).to(Bakesale);
                       // Buyer.interact(declassify(interact.alertPaidRecipient(Bakesale, serviceFee, 'service fee')))
 
