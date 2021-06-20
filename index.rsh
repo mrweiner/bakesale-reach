@@ -433,7 +433,6 @@ export const main = Reach.App(
                       // The amount that qualifies for merchant/benficiary payout,
                       const feedLiUnitsCost = liUnitsCost - serviceFee;
 
-
                       // ========================================================
                       // Set up payments for final assertion and transfer.
                       // ======================================================== 
