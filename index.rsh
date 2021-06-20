@@ -314,7 +314,6 @@ const validateCleanOrder = (orderData) => {
   const beneficiaryPctsValid = orderData.merchants.all(m => {
     const itemPctsValid = m.lineItems.all(li => {
       const totalBensPct = li.beneficiaries.map(b => b.percentToReceive).sum();
-
       const realBensPctPos = li.beneficiaries.all(b => 
         b.isReal ? b.percentToReceive > 0 : b.percentToReceive == 0);
       
