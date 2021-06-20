@@ -289,45 +289,41 @@ const getOrderTotal = (orderData) => {
  *   objects are operable, i.e. no Maybes.
  */
 const validateCleanOrder = (orderData) => {
+  // Unlikely that an orderTotal would be <= 0 given the below
+  // validation of the amts and pcts below, but keeping this
+  // for the sake of sanity.
   const orderTotal = getOrderTotal(orderData);
   const positiveOrderTotal = orderTotal > 0;
 
   // All amounts on the order must be >= 0.
-  const allAmtsNonNegative = orderData.merchants.reduce(true, (allAmtsPos, x) => {
-    const itemsPositive = x.lineItems.reduce(true, (ip, y) => {
+  const allAmtsNonNegative = orderData.merchants.all(x => {
+    const itemsPositive = x.lineItems.all(y => {
       const unitPriceValid = y.isReal ? y.unitPrice > 0 : y.unitPrice == 0
       const qtyValid = y.isReal ? y.qty > 0 : y.qty == 0
       const shippingValid = y.isReal ? y.shipping >= 0 : y.shipping == 0
       const taxValid = y.isReal ? y.tax >= 0 : y.tax == 0
-      return !ip ? false : unitPriceValid && qtyValid && shippingValid && taxValid
+      return unitPriceValid && qtyValid && shippingValid && taxValid;
     });
 
-    return !allAmtsPos ? false : itemsPositive;
+    return itemsPositive;
   });
 
   // Any individual item's beneficiary percentages need to be <= 100
-  const beneficiaryPctsValid = orderData.merchants.reduce(true, (pctsValid, x) => {
-    const itemPctsValid = x.lineItems.reduce(true, (itemPctValid, y) => {
-      const beneficiariesPct = y.beneficiaries.reduce(0, (pctTotal, z) => {
-        return pctTotal + z.percentToReceive;
-      });
+  const beneficiaryPctsValid = orderData.merchants.all(x => {
+    const itemPctsValid = x.lineItems.all(y => {
+      const allBenPcts = y.beneficiaries.map(z => z.percentToReceive);
+      const totalBensPct = allBenPcts.sum();
 
-      const allRealBensPctPos = y.beneficiaries.reduce(true, (allValid, a) => {
-        const isValid = a.isReal ? a.percentToReceive > 0 : a.percentToReceive == 0; 
-        return !allValid ? false : isValid;
-      })
+      const realBensPctPos = y.beneficiaries.all(b => 
+        b.isReal ? b.percentToReceive > 0 : b.percentToReceive == 0);
       
-      const itemValid = beneficiariesPct <= 100 && allRealBensPctPos;
-
-      return !itemPctValid ? false : itemValid;
-    });
+      return totalBensPct <= 100 && realBensPctPos;
+    }); 
  
-    return !pctsValid ? false : itemPctsValid;
+    return itemPctsValid;
   });
 
-  const orderIsValid = positiveOrderTotal 
-    && allAmtsNonNegative
-    && beneficiaryPctsValid
+  const orderIsValid = positiveOrderTotal && allAmtsNonNegative && beneficiaryPctsValidl;
 
   return {
     orderIsValid,
