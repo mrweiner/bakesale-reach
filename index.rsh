@@ -272,11 +272,12 @@ const cleanOrderData = (orderData, fakesAddr) => {
  *   The order total.
  */
 const getOrderTotal = (orderData) => {
-  return orderData.merchants.reduce(0, (oTotal, x) => {
-    const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => 
-      mTotal + (y.unitPrice * y.qty) + y.shipping + y.tax);
-    return oTotal + merchantTotal;
-  }); 
+  const merchantTotals = orderData.merchants.map(x => {
+    const liTotals = x.lineItems.map(y => (y.unitPrice * y.qty) + y.shipping + y.tax);
+    return liTotals.sum(); 
+  });
+
+  return merchantTotals.sum();
 }
 
 /**
@@ -297,15 +298,15 @@ const validateCleanOrder = (orderData) => {
 
   // All amounts on the order must be >= 0.
   const allAmtsNonNegative = orderData.merchants.all(x => {
-    const itemsPositive = x.lineItems.all(y => {
+    const itemsNonNegative = x.lineItems.all(y => {
       const unitPriceValid = y.isReal ? y.unitPrice > 0 : y.unitPrice == 0
       const qtyValid = y.isReal ? y.qty > 0 : y.qty == 0
       const shippingValid = y.isReal ? y.shipping >= 0 : y.shipping == 0
       const taxValid = y.isReal ? y.tax >= 0 : y.tax == 0
       return unitPriceValid && qtyValid && shippingValid && taxValid;
     });
-
-    return itemsPositive;
+ 
+    return itemsNonNegative;
   });
 
   // Any individual item's beneficiary percentages need to be <= 100
@@ -323,7 +324,7 @@ const validateCleanOrder = (orderData) => {
     return itemPctsValid;
   });
 
-  const orderIsValid = positiveOrderTotal && allAmtsNonNegative && beneficiaryPctsValidl;
+  const orderIsValid = positiveOrderTotal && allAmtsNonNegative && beneficiaryPctsValid;
 
   return {
     orderIsValid,
@@ -423,16 +424,19 @@ export const main = Reach.App(
                         return pct + x.percentToReceive;
                       }); 
 
-                      // Set up all payment calculations for final assertion and transfer.
-                      const pctToBeneficiariesAsDecimal = pctToBeneficiaries / 100;
-
+                      // Set up all payment calculations for final assertions and transfer.
+                      //
                       // The amount that qualifies for merchant/benficiary payout,
                       // i.e. the unitPrice * qty - service fee.
                       const feedLiUnitsCost = liUnitsCost - serviceFee;
+
+                      const pctToBeneficiariesAsDecimal = pctToBeneficiaries / 100;
                       const amtToBeneficiaries = feedLiUnitsCost * pctToBeneficiariesAsDecimal;
+
                       const pctToMerchantAsDecimal = 1 - pctToBeneficiariesAsDecimal
                       const feedLiMinusBensPct = pctToMerchantAsDecimal * feedLiUnitsCost;
                       const amtToMerchant = feedLiMinusBensPct + li.shipping;
+
                       const amtBeingPaidOnLi = serviceFee + amtToMerchant + amtToBeneficiaries + li.tax;
 
                       assert(amtToBeneficiaries + amtToMerchant == feedLiUnitsCost + li.shipping);
@@ -445,7 +449,7 @@ export const main = Reach.App(
                       transfer(li.tax).to(Bakesale)
                       transfer(amtToMerchant).to(mi.addr);
 
-                      // Pay out the beneficiaries
+                      // Pay out the beneficiaries 
                       li.beneficiaries.forEach(ben => {
                         if(ben.isReal) {
                           assert(ben.percentToReceive > 0);
