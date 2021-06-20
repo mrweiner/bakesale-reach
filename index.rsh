@@ -167,14 +167,11 @@ const OrderData = {
  * @returns {Array(Object(Foo)}
  *   Array of operable Foo els.
  */
-const cleanMaybeArr = (arr, addr, callbackCreateFaker) => {
-  return arr.map((x) => {
-    return fromMaybe(x,  
-      (() => callbackCreateFaker(addr)), 
-      ((y) => ({isReal: true, ...y}))
-    );  
-  })
-}
+const cleanMaybeArr = (arr, addr, callbackCreateFaker) => 
+  arr.map((x) => fromMaybe(x,  
+    (() => callbackCreateFaker(addr)), 
+    ((y) => ({isReal: true, ...y}))))
+ 
 
 /**
  * Convert Array(Maybe(Object(Beneficiary)) to usable Array(Object(Beneficiary)).
