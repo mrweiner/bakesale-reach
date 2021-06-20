@@ -410,10 +410,10 @@ export const main = Reach.App(
               // Keep this all simple for MVP testing.
               // We can make the transfers more efficient
               // and aggregated after we know it works.
-              orderDataClean.merchants.forEach(mi => {
+              orderDataClean.merchants.forEach(merchant => {
                 // Looking at a single merchant. 
-                if(mi.isReal) {
-                  mi.lineItems.forEach(li => {
+                if(merchant.isReal) {
+                  merchant.lineItems.forEach(li => {
                     // Looking at a single line item.
                     if(li.isReal) {
                       const liUnitsCost = li.unitPrice * li.qty;
@@ -424,7 +424,7 @@ export const main = Reach.App(
 
                       const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
                         return pct + x.percentToReceive;
-                      }); 
+                      });  
 
                       // Set up all payment calculations for final assertions and transfer.
                       //
@@ -449,7 +449,7 @@ export const main = Reach.App(
 
                       /** @todo This needs to go to a tax acct. */
                       transfer(li.tax).to(Bakesale)
-                      transfer(amtToMerchant).to(mi.addr);
+                      transfer(amtToMerchant).to(merchant.addr);
 
                       // Pay out the beneficiaries 
                       li.beneficiaries.forEach(ben => {
