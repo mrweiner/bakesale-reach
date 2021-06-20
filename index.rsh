@@ -94,7 +94,8 @@ const createFakeBeneficiary = (addr) => ({
  */
 const LineItem = {
   isReal: Bool,
-  totalCost: UInt, // The unit price * qty
+  unitPrice: UInt,
+  qty: UInt,
   shipping: UInt,
   tax: UInt,
   beneficiaries: Array(Maybe(Object(Beneficiary)), MAX_BENEFICIARIES_PER_ITEM)
@@ -110,7 +111,8 @@ const LineItem = {
  */
 const createFakeLineItem = (addr) => ({
   isReal: false,
-  totalCost: 0,
+  unitPrice: 0,
+  qty: 0,
   shipping: 0,
   tax: 0,
   beneficiaries: Array.iota(MAX_BENEFICIARIES_PER_ITEM).map(_ =>  
@@ -145,7 +147,6 @@ const createFakeMerchant = (addr) => ({
  * The order data for which payment is processed.
  */
 const OrderData = {
-  orderTotal: UInt,
   merchants: Array(Maybe(Object(Merchant)), MAX_TOTAL_MERCHANTS),
 }
 
@@ -235,7 +236,8 @@ const cleanOrderData = (orderData, fakesAddr) => {
 
       return {
         isReal: y.isReal,
-        totalCost: y.totalCost, 
+        unitPrice: y.unitPrice,
+        qty: y.qty,
         shipping: y.shipping,
         tax: y.tax,
         beneficiaries: beneficiariesClean
@@ -250,7 +252,6 @@ const cleanOrderData = (orderData, fakesAddr) => {
   }); 
 
   return {
-    orderTotal: orderData.orderTotal,
     merchants: merchantsFinal 
   }
 }
@@ -259,6 +260,24 @@ const cleanOrderData = (orderData, fakesAddr) => {
 // ========================================================
 // Order Validation
 // ========================================================
+
+/**
+ * Calculate the order total.
+ * 
+ * @param {OrderData} orderData
+ *   The CLEANED order data. The logic assumes that all
+ *   objects are operable, i.e. no Maybes.
+ * 
+ * @return {UInt} 
+ *   The order total.
+ */
+const getOrderTotal = (orderData) => {
+  return orderData.merchants.reduce(0, (oTotal, x) => {
+    const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => 
+      mTotal + (y.unitPrice * y.qty) + y.shipping + y.tax);
+    return oTotal + merchantTotal;
+  }); 
+}
 
 /**
  * Check whether or not the order is valid to be processed.
@@ -270,62 +289,50 @@ const cleanOrderData = (orderData, fakesAddr) => {
  *   objects are operable, i.e. no Maybes.
  */
 const validateCleanOrder = (orderData) => {
-  const positiveOrderTotal = orderData.orderTotal > 0;
-  const orderTotalCalcd = orderData.merchants.reduce(0, (oTotal, x) => {
-    const merchantTotal = x.lineItems.reduce(0, (mTotal, y) => mTotal + y.totalCost);
-    return oTotal + merchantTotal;
-  }); 
-
-  // Ensure that the provided order total matches the order contents.
-  const orderTotalsMatch = orderData.orderTotal == orderTotalCalcd;
+  const orderTotal = getOrderTotal(orderData);
+  const positiveOrderTotal = orderTotal > 0;
 
   // All amounts on the order must be >= 0.
   const allAmtsNonNegative = orderData.merchants.reduce(true, (allAmtsPos, x) => {
     const itemsPositive = x.lineItems.reduce(true, (ip, y) => {
-      const totalCostValid = y.isReal ? y.totalCost > 0 : y.totalCost == 0
+      const unitPriceValid = y.isReal ? y.unitPrice > 0 : y.unitPrice == 0
+      const qtyValid = y.isReal ? y.qty > 0 : y.qty == 0
       const shippingValid = y.isReal ? y.shipping >= 0 : y.shipping == 0
       const taxValid = y.isReal ? y.tax >= 0 : y.tax == 0
-      return !ip ? false : totalCostValid && shippingValid && taxValid
+      return !ip ? false : unitPriceValid && qtyValid && shippingValid && taxValid
     });
 
     return !allAmtsPos ? false : itemsPositive;
   });
 
-  // Any individual item's beneficiary percentages need to be <= 100.
+  // Any individual item's beneficiary percentages need to be <= 100
   const beneficiaryPctsValid = orderData.merchants.reduce(true, (pctsValid, x) => {
     const itemPctsValid = x.lineItems.reduce(true, (itemPctValid, y) => {
       const beneficiariesPct = y.beneficiaries.reduce(0, (pctTotal, z) => {
         return pctTotal + z.percentToReceive;
       });
+
+      const allRealBensPctPos = y.beneficiaries.reduce(true, (allValid, a) => {
+        const isValid = a.isReal ? a.percentToReceive > 0 : a.percentToReceive == 0; 
+        return !allValid ? false : isValid;
+      })
       
-      return !itemPctValid ? false : beneficiariesPct <= 100;
+      const itemValid = beneficiariesPct <= 100 && allRealBensPctPos;
+
+      return !itemPctValid ? false : itemValid;
     });
  
     return !pctsValid ? false : itemPctsValid;
   });
 
-  // Any individual itemls tax + shipping must be less than the order item's totalCost.
-  // If they exceed it then that means the total does not account for one of them.
-  const taxShippingValid = orderData.merchants.reduce(true, (tsValid, x) => {
-    const itemTsValid = x.lineItems.reduce(true, (itemTsValid, y) => {      
-      return y.totalCost > y.tax + y.shipping;
-    });
-
-    return !tsValid ? false : itemTsValid;
-  });
-
   const orderIsValid = positiveOrderTotal 
-    && orderTotalsMatch 
     && allAmtsNonNegative
     && beneficiaryPctsValid
-    && taxShippingValid;
 
   return {
     orderIsValid,
-    orderTotalsMatch, 
     allAmtsNonNegative,
     beneficiaryPctsValid,
-    taxShippingValid
   }
 }
 
@@ -397,8 +404,9 @@ export const main = Reach.App(
               Buyer.only(() => declassify(interact.errorGenericInvalidOrder()));
               return true;
             } else {
+              const orderTotal = getOrderTotal(orderDataClean);
               commit();
-              Buyer.publish().pay(orderData.orderTotal);
+              Buyer.publish().pay(orderTotal);
 
               // Keep this all simple for MVP testing.
               // We can make the transfers more efficient
@@ -409,28 +417,44 @@ export const main = Reach.App(
                   mi.lineItems.forEach(li => {
                     // Looking at a single line item.
                     if(li.isReal) {
-                      const serviceFee = li.totalCost * BAKESALE_FEE_MULTIPLE;
-                      const totalMinusFee = li.totalCost - serviceFee;
+                      const liUnitsCost = li.unitPrice * li.qty;
+                      const thisLiTotal = liUnitsCost + li.tax + li.shipping;
+
+                      const serviceFee = liUnitsCost * BAKESALE_FEE_MULTIPLE;
+                      assert(serviceFee < liUnitsCost);
+
+                      const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
+                        return pct + x.percentToReceive;
+                      }); 
+
+                      // Set up all payment calculations for final assertion and transfer.
+                      const pctToBeneficiariesAsDecimal = pctToBeneficiaries / 100;
+
+                      // The amount that qualifies for merchant/benficiary payout,
+                      // i.e. the unitPrice * qty - service fee.
+                      const feedLiUnitsCost = liUnitsCost - serviceFee;
+                      const amtToBeneficiaries = feedLiUnitsCost * pctToBeneficiariesAsDecimal;
+                      const pctToMerchantAsDecimal = 1 - pctToBeneficiariesAsDecimal
+                      const feedLiMinusBensPct = pctToMerchantAsDecimal * feedLiUnitsCost;
+                      const amtToMerchant = feedLiMinusBensPct + li.shipping;
+                      const amtBeingPaidOnLi = serviceFee + amtToMerchant + amtToBeneficiaries + li.tax;
+
+                      assert(amtToBeneficiaries + amtToMerchant == feedLiUnitsCost + li.shipping);
+                      assert(amtBeingPaidOnLi == thisLiTotal);
 
                       transfer(serviceFee).to(Bakesale);
                       // Buyer.interact(declassify(interact.alertPaidRecipient(Bakesale, serviceFee, 'service fee')))
 
                       /** @todo This needs to go to a tax acct. */
                       transfer(li.tax).to(Bakesale)
-
-                      const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
-                        return pct + x.percentToReceive;
-                      }); 
-
-                      // Pay out the merchant.
-                      const pctToMerchant = (100 - pctToBeneficiaries) / 100;
-                      const amtToMerchant = pctToMerchant * totalMinusFee + li.shipping;
                       transfer(amtToMerchant).to(mi.addr);
 
                       // Pay out the beneficiaries
                       li.beneficiaries.forEach(ben => {
                         if(ben.isReal) {
-                          const amtToBen = totalMinusFee * ben.percentToReceive;
+                          assert(ben.percentToReceive > 0);
+                          const pctAsDecimal = ben.percentToReceive / 100;
+                          const amtToBen = feedLiUnitsCost * pctAsDecimal;
                           transfer(amtToBen).to(ben.addr);
                         }
                       })
@@ -438,8 +462,6 @@ export const main = Reach.App(
                   })
                 }
               });
-
-              assert(balance() == 0)
 
               return true;
             } 
@@ -465,3 +487,4 @@ export const main = Reach.App(
     commit();
   }
 );
+
