@@ -272,8 +272,8 @@ const cleanOrderData = (orderData, fakesAddr) => {
  *   The order total.
  */
 const getOrderTotal = (orderData) => {
-  const merchantTotals = orderData.merchants.map(x => {
-    const liTotals = x.lineItems.map(y => (y.unitPrice * y.qty) + y.shipping + y.tax);
+  const merchantTotals = orderData.merchants.map(m => {
+    const liTotals = m.lineItems.map(li => (li.unitPrice * li.qty) + li.shipping + li.tax);
     return liTotals.sum(); 
   });
 
@@ -298,12 +298,12 @@ const validateCleanOrder = (orderData) => {
   const positiveOrderTotal = orderTotal > 0;
 
   // All amounts on the order must be >= 0.
-  const allAmtsNonNegative = orderData.merchants.all(x => {
-    const itemsNonNegative = x.lineItems.all(y => {
-      const unitPriceValid = y.isReal ? y.unitPrice > 0 : y.unitPrice == 0
-      const qtyValid = y.isReal ? y.qty > 0 : y.qty == 0
-      const shippingValid = y.isReal ? y.shipping >= 0 : y.shipping == 0
-      const taxValid = y.isReal ? y.tax >= 0 : y.tax == 0
+  const allAmtsNonNegative = orderData.merchants.all(m => {
+    const itemsNonNegative = m.lineItems.all(li => {
+      const unitPriceValid = li.isReal ? li.unitPrice > 0 : li.unitPrice == 0
+      const qtyValid = li.isReal ? li.qty > 0 : li.qty == 0
+      const shippingValid = li.isReal ? li.shipping >= 0 : li.shipping == 0
+      const taxValid = li.isReal ? li.tax >= 0 : li.tax == 0
       return unitPriceValid && qtyValid && shippingValid && taxValid;
     });
  
@@ -311,12 +311,11 @@ const validateCleanOrder = (orderData) => {
   });
 
   // Any individual item's beneficiary percentages need to be <= 100
-  const beneficiaryPctsValid = orderData.merchants.all(x => {
-    const itemPctsValid = x.lineItems.all(y => {
-      const allBenPcts = y.beneficiaries.map(z => z.percentToReceive);
-      const totalBensPct = allBenPcts.sum();
+  const beneficiaryPctsValid = orderData.merchants.all(m => {
+    const itemPctsValid = m.lineItems.all(li => {
+      const totalBensPct = li.beneficiaries.map(b => b.percentToReceive).sum();
 
-      const realBensPctPos = y.beneficiaries.all(b => 
+      const realBensPctPos = li.beneficiaries.all(b => 
         b.isReal ? b.percentToReceive > 0 : b.percentToReceive == 0);
       
       return totalBensPct <= 100 && realBensPctPos;
@@ -437,10 +436,8 @@ export const main = Reach.App(
 
                       // ========================================================
                       // Set up payments for final assertion and transfer.
-                      // ========================================================
-                      const pctToBeneficiaries = li.beneficiaries.reduce(0, (pct, x) => {
-                        return pct + x.percentToReceive;
-                      });  
+                      // ======================================================== 
+                      const pctToBeneficiaries = li.beneficiaries.map(b => b.percentToReceive).sum();
                       const pctToBeneficiariesAsDecimal = pctToBeneficiaries / 100;
                       const amtToBeneficiaries = feedLiUnitsCost * pctToBeneficiariesAsDecimal;
 
@@ -465,12 +462,12 @@ export const main = Reach.App(
                       transfer(amtToMerchant).to(merchant.addr);
 
                       // Pay out the beneficiaries 
-                      li.beneficiaries.forEach(ben => {
-                        if(ben.isReal) {
-                          assert(ben.percentToReceive > 0);
-                          const pctAsDecimal = ben.percentToReceive / 100;
-                          const amtToBen = feedLiUnitsCost * pctAsDecimal;
-                          transfer(amtToBen).to(ben.addr);
+                      li.beneficiaries.forEach(b => {
+                        if(b.isReal) {
+                          assert(b.percentToReceive > 0);
+                          const pctAsDecimal = b.percentToReceive / 100;
+                          const amt = feedLiUnitsCost * pctAsDecimal;
+                          transfer(amt).to(b.addr);
                         }
                       })
                     }
